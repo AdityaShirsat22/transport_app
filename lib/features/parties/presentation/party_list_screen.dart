@@ -178,10 +178,20 @@ class PartyListScreen extends ConsumerWidget {
                                 Text(p.name, style: AppTextStyles.labelLarge.copyWith(fontWeight: FontWeight.bold)),
                               ],
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.edit_outlined, size: 20),
-                              tooltip: 'Edit Party',
-                              onPressed: () => _showEditDialog(context, ref, p),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined, size: 20),
+                                  tooltip: 'Edit Party',
+                                  onPressed: () => _showEditDialog(context, ref, p),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.red),
+                                  tooltip: 'Delete Party',
+                                  onPressed: () => _confirmDelete(context, ref, p),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -276,9 +286,18 @@ class PartyListScreen extends ConsumerWidget {
                               ),
                             ),
                             DataCell(
-                              IconButton(
-                                icon: const Icon(Icons.edit_outlined, size: 18),
-                                onPressed: () => _showEditDialog(context, ref, p),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_outlined, size: 18),
+                                    onPressed: () => _showEditDialog(context, ref, p),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.red),
+                                    tooltip: 'Delete Party',
+                                    onPressed: () => _confirmDelete(context, ref, p),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -308,6 +327,33 @@ class PartyListScreen extends ConsumerWidget {
           Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w500)),
           const SizedBox(width: 4),
           Text(value, style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, WidgetRef ref, Party p) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Party / Customer'),
+        content: Text('Are you sure you want to delete customer/party "${p.name}"? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              ref.read(partyViewModelProvider.notifier).deleteParty(p.id);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Party "${p.name}" deleted successfully'), backgroundColor: AppColors.green),
+              );
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
         ],
       ),
     );

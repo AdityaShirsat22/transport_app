@@ -218,10 +218,20 @@ class PortCfsListScreen extends ConsumerWidget {
                             ],
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined, size: 20),
-                          tooltip: 'Edit Terminal',
-                          onPressed: () => _showEditDialog(context, ref, item),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, size: 20),
+                              tooltip: 'Edit Terminal',
+                              onPressed: () => _showEditDialog(context, ref, item),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.red),
+                              tooltip: 'Delete Terminal',
+                              onPressed: () => _confirmDelete(context, ref, item),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -251,9 +261,18 @@ class PortCfsListScreen extends ConsumerWidget {
                             DataCell(Text(item.type.label, style: AppTextStyles.bodyMedium)),
                             DataCell(Text(item.location, style: AppTextStyles.bodySmall)),
                             DataCell(
-                              IconButton(
-                                icon: const Icon(Icons.edit_outlined, size: 18),
-                                onPressed: () => _showEditDialog(context, ref, item),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_outlined, size: 18),
+                                    onPressed: () => _showEditDialog(context, ref, item),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.red),
+                                    tooltip: 'Delete Terminal',
+                                    onPressed: () => _confirmDelete(context, ref, item),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -266,6 +285,33 @@ class PortCfsListScreen extends ConsumerWidget {
             SizedBox(height: isMobile ? 80 : 20),
           ],
         ),
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, WidgetRef ref, PortCfs item) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Port / CFS'),
+        content: Text('Are you sure you want to delete terminal/facility "${item.name}"? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              ref.read(portCfsViewModelProvider.notifier).deletePortCfs(item.id);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Terminal "${item.name}" deleted successfully'), backgroundColor: AppColors.green),
+              );
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }

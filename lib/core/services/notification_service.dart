@@ -8,13 +8,14 @@ abstract class NotificationService {
   Future<NotificationLog> sendVehicleAssignmentNotification(
     Transport transport, {
     String recipientPhone = '',
+    String channel = 'WhatsApp',
   });
 }
 
-class MockNotificationService implements NotificationService {
+class ProductionNotificationService implements NotificationService {
   final TransportRepository _transportRepo;
 
-  MockNotificationService(this._transportRepo);
+  ProductionNotificationService(this._transportRepo);
 
   @override
   String generateAssignmentMessage(Transport transport) {
@@ -23,7 +24,7 @@ class MockNotificationService implements NotificationService {
 Your transport vehicle has been assigned.
 
 Vehicle No: ${transport.vehicleNumber ?? 'N/A'}
-Container No: ${transport.containerNumber}
+Container No: ${transport.containerNumber.isNotEmpty ? transport.containerNumber : 'Pending'}
 Driver Name: ${transport.driverName ?? 'N/A'}
 Driver Contact: ${transport.driverMobile ?? 'N/A'}
 From: ${transport.fromLocationName}
@@ -37,16 +38,20 @@ Thank you.''';
   Future<NotificationLog> sendVehicleAssignmentNotification(
     Transport transport, {
     String recipientPhone = '',
+    String channel = 'WhatsApp',
   }) async {
     final message = generateAssignmentMessage(transport);
+
+    // External WhatsApp/SMS provider is not configured with live API gateway credentials yet,
+    // so we accurately mark status as 'NOT_CONFIGURED' per Requirement 28.
     final log = NotificationLog(
       id: 'notif-${DateTime.now().millisecondsSinceEpoch}',
       transportId: transport.id,
       recipientName: transport.partyName,
       recipientMobile: recipientPhone.isNotEmpty ? recipientPhone : '9822001122',
-      channel: 'WhatsApp',
+      channel: channel,
       messageBody: message,
-      status: 'SENT',
+      status: 'NOT_CONFIGURED',
       sentAt: DateTime.now(),
     );
 
@@ -57,5 +62,5 @@ Thank you.''';
 
 final notificationServiceProvider = Provider<NotificationService>((ref) {
   final transportRepo = ref.watch(transportRepositoryProvider);
-  return MockNotificationService(transportRepo);
+  return ProductionNotificationService(transportRepo);
 });

@@ -376,7 +376,7 @@ class DashboardScreen extends ConsumerWidget {
                                   ),
                                 ),
                                 DataCell(Text(t.bookingNumber, style: AppTextStyles.bodyMedium)),
-                                DataCell(Text(t.containerNumber, style: AppTextStyles.codeMono)),
+                                DataCell(Text(t.containerNumber.isNotEmpty ? t.containerNumber : '—', style: AppTextStyles.codeMono)),
                                 DataCell(
                                   ConstrainedBox(
                                     constraints: const BoxConstraints(maxWidth: 160),
@@ -430,7 +430,10 @@ class DashboardScreen extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 6),
-            Row(
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -444,17 +447,18 @@ class DashboardScreen extends ConsumerWidget {
                     style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
                   ),
                 ),
-                const SizedBox(width: 8),
-                const Icon(Icons.inventory_2_outlined, size: 14, color: AppColors.textSecondary),
-                const SizedBox(width: 4),
-                Text(t.containerNumber, style: AppTextStyles.codeMono.copyWith(fontSize: 12, fontWeight: FontWeight.bold)),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '• ${t.partyName}',
-                    style: AppTextStyles.bodySmall,
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.inventory_2_outlined, size: 14, color: AppColors.textSecondary),
+                    const SizedBox(width: 4),
+                    Text(t.containerNumber.isNotEmpty ? t.containerNumber : 'NO CONTAINER', style: AppTextStyles.codeMono.copyWith(fontSize: 12, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                Text(
+                  '• ${t.partyName}',
+                  style: AppTextStyles.bodySmall,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),

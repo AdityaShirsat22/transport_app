@@ -284,10 +284,20 @@ class VehicleListScreen extends ConsumerWidget {
                               icon: const Icon(Icons.swap_vert, size: 16),
                               label: const Text('Status'),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.edit_outlined, size: 20),
-                              tooltip: 'Edit Vehicle',
-                              onPressed: () => _showEditDialog(context, ref, v),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined, size: 20),
+                                  tooltip: 'Edit Vehicle',
+                                  onPressed: () => _showEditDialog(context, ref, v),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.red),
+                                  tooltip: 'Delete Vehicle',
+                                  onPressed: () => _confirmDelete(context, ref, v),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -333,6 +343,11 @@ class VehicleListScreen extends ConsumerWidget {
                                     icon: const Icon(Icons.sync_alt, size: 18),
                                     onPressed: () => _showStatusSheet(context, ref, v),
                                   ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.red),
+                                    tooltip: 'Delete Vehicle',
+                                    onPressed: () => _confirmDelete(context, ref, v),
+                                  ),
                                 ],
                               ),
                             ),
@@ -346,6 +361,40 @@ class VehicleListScreen extends ConsumerWidget {
             SizedBox(height: isMobile ? 80 : 20),
           ],
         ),
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, WidgetRef ref, Vehicle v) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Vehicle'),
+        content: Text('Are you sure you want to delete vehicle ${v.vehicleNumber}? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              final success = ref.read(vehicleViewModelProvider.notifier).deleteVehicle(v.id);
+              if (!success) {
+                final err = ref.read(vehicleViewModelProvider).errorMessage ?? 'Cannot delete vehicle';
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(err), backgroundColor: AppColors.red),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Vehicle ${v.vehicleNumber} deleted successfully'), backgroundColor: AppColors.green),
+                );
+              }
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }

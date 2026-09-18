@@ -129,9 +129,15 @@ class VehicleViewModel extends StateNotifier<VehicleState> {
     loadVehicles();
   }
 
-  void deleteVehicle(String id) {
+  bool deleteVehicle(String id) {
+    final veh = _repo.getById(id);
+    if (veh != null && (veh.status == VehicleStatus.onTrip || veh.assignedDriverId != null)) {
+      state = state.copyWith(errorMessage: 'Cannot deactivate vehicle while actively assigned to an ongoing trip.');
+      return false;
+    }
     _repo.delete(id);
     loadVehicles();
+    return true;
   }
 }
 

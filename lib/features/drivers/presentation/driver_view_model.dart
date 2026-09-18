@@ -104,9 +104,15 @@ class DriverViewModel extends StateNotifier<DriverState> {
     loadDrivers();
   }
 
-  void deleteDriver(String id) {
+  bool deleteDriver(String id) {
+    final drv = _repo.getById(id);
+    if (drv != null && (drv.status == DriverStatus.onTrip || drv.currentVehicleId != null)) {
+      state = state.copyWith(errorMessage: 'Cannot deactivate driver while actively assigned to an ongoing trip.');
+      return false;
+    }
     _repo.delete(id);
     loadDrivers();
+    return true;
   }
 }
 

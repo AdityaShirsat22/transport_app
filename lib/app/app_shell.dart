@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../core/auth/auth_provider.dart';
 import '../core/constants/app_constants.dart';
+import '../core/sync/sync_engine.dart';
 import '../core/widgets/responsive_layout.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_text_styles.dart';
@@ -23,6 +25,7 @@ class AppShell extends ConsumerWidget {
       return 3;
     }
     if (location.startsWith('/reports')) return 4;
+    if (location.startsWith('/settings')) return 5;
     return 0;
   }
 
@@ -43,6 +46,9 @@ class AppShell extends ConsumerWidget {
       case 4:
         context.go('/reports');
         break;
+      case 5:
+        context.go('/settings');
+        break;
     }
   }
 
@@ -51,9 +57,10 @@ class AppShell extends ConsumerWidget {
     final isMobile = ResponsiveLayout.isMobile(context);
     final location = GoRouterState.of(context).uri.path;
     final selectedIndex = _calculateSelectedIndex(location);
+    final syncState = ref.watch(syncEngineProvider);
+    final authState = ref.watch(authProvider);
+    final user = authState.user;
 
-    // Hide top app bar & bottom navigation bar on detail/creation screens if preferred,
-    // or keep top bar clean.
     final isDetailOrChild = location == '/transport/create' ||
         (location.startsWith('/transport/') && location != '/transport');
 
@@ -89,7 +96,7 @@ class AppShell extends ConsumerWidget {
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
-                            'Operations Manager',
+                            user?.name ?? 'Operations Manager',
                             style: AppTextStyles.bodySmall.copyWith(
                               fontSize: 10,
                               color: AppColors.textMuted,
@@ -102,6 +109,38 @@ class AppShell extends ConsumerWidget {
                   ],
                 ),
                 actions: [
+                  // Sync dot indicator
+                  InkWell(
+                    onTap: () => context.go('/settings'),
+                    borderRadius: BorderRadius.circular(16),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: syncState.isOnline ? AppColors.green : AppColors.amber,
+                            ),
+                          ),
+                          if (syncState.pendingCount > 0) ...[
+                            const SizedBox(width: 4),
+                            Text(
+                              '${syncState.pendingCount}',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: syncState.isOnline ? AppColors.green : AppColors.amber,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ),
                   IconButton(
                     icon: Container(
                       padding: const EdgeInsets.all(6),
@@ -115,12 +154,15 @@ class AppShell extends ConsumerWidget {
                     onPressed: () => context.go('/transport/create'),
                   ),
                   const SizedBox(width: 4),
-                  CircleAvatar(
-                    radius: 14,
-                    backgroundColor: AppColors.accentLight,
-                    child: const Text(
-                      'AO',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                  InkWell(
+                    onTap: () => context.go('/settings'),
+                    child: CircleAvatar(
+                      radius: 14,
+                      backgroundColor: AppColors.accentLight,
+                      child: Text(
+                        user?.name.substring(0, user.name.length >= 2 ? 2 : 1).toUpperCase() ?? 'AO',
+                        style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -136,7 +178,7 @@ class AppShell extends ConsumerWidget {
         bottomNavigationBar: isDetailOrChild
             ? null
             : NavigationBar(
-                selectedIndex: selectedIndex,
+                selectedIndex: selectedIndex > 4 ? 0 : selectedIndex,
                 onDestinationSelected: (index) => _onItemTapped(index, context),
                 destinations: const [
                   NavigationDestination(
@@ -169,7 +211,7 @@ class AppShell extends ConsumerWidget {
       );
     }
 
-    // Tablet & Desktop Responsive Layout
+    // Tablet & Desktop Responsive Layout (Landscape-first)
     return Scaffold(
       body: Row(
         children: [
@@ -185,7 +227,7 @@ class AppShell extends ConsumerWidget {
   }
 }
 
-class _SidebarContent extends StatelessWidget {
+class _SidebarContent extends ConsumerWidget {
   final String currentPath;
   final bool isMobile;
 
@@ -195,7 +237,11 @@ class _SidebarContent extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final syncState = ref.watch(syncEngineProvider);
+    final authState = ref.watch(authProvider);
+    final user = authState.user;
+
     return Container(
       color: AppColors.primary,
       child: SafeArea(
@@ -364,7 +410,7 @@ class _SidebarContent extends StatelessWidget {
                   const Padding(
                     padding: EdgeInsets.fromLTRB(14, 16, 14, 6),
                     child: Text(
-                      'ANALYTICS',
+                      'ANALYTICS & SYSTEM',
                       style: TextStyle(
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
@@ -380,55 +426,114 @@ class _SidebarContent extends StatelessWidget {
                     activeIcon: Icons.bar_chart,
                     route: '/reports',
                   ),
+                  _buildNavItem(
+                    context,
+                    title: 'Settings & Cloud',
+                    icon: Icons.settings_outlined,
+                    activeIcon: Icons.settings,
+                    route: '/settings',
+                  ),
                 ],
+              ),
+            ),
+
+            // Subtle Real-time Sync Indicator Footer
+            InkWell(
+              onTap: () {
+                if (isMobile) Navigator.of(context).pop();
+                context.go('/settings');
+              },
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1E293B),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: const Color(0xFF334155)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: syncState.isOnline ? AppColors.green : AppColors.amber,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        syncState.isSyncing
+                            ? 'Syncing changes...'
+                            : syncState.isOnline
+                                ? 'Cloud Synced'
+                                : 'Offline (${syncState.pendingCount} queued)',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                          color: syncState.isOnline ? const Color(0xFF94A3B8) : AppColors.amber,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const Icon(Icons.chevron_right, size: 14, color: Color(0xFF64748B)),
+                  ],
+                ),
               ),
             ),
 
             // Super Admin User Profile Footnote
             const Divider(color: Color(0xFF334155), height: 1),
-            Container(
-              padding: const EdgeInsets.all(14),
-              child: Row(
-                children: [
-                  CircleAvatar(
-                    radius: 18,
-                    backgroundColor: AppColors.accentLight,
-                    child: const Text(
-                      'AO',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+            InkWell(
+              onTap: () {
+                if (isMobile) Navigator.of(context).pop();
+                context.go('/settings');
+              },
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 18,
+                      backgroundColor: AppColors.accentLight,
+                      child: Text(
+                        user?.name.substring(0, user.name.length >= 2 ? 2 : 1).toUpperCase() ?? 'AO',
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          AppConstants.demoUserName,
-                          style: AppTextStyles.labelMedium.copyWith(color: Colors.white),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Container(
-                          margin: const EdgeInsets.only(top: 2),
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF334155),
-                            borderRadius: BorderRadius.circular(4),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            user?.name ?? 'Aditya Ops Manager',
+                            style: AppTextStyles.labelMedium.copyWith(color: Colors.white),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          child: Text(
-                            AppConstants.demoUserRole.toUpperCase(),
-                            style: const TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w700,
-                              color: Color(0xFF38BDF8),
-                              letterSpacing: 0.5,
+                          Container(
+                            margin: const EdgeInsets.only(top: 2),
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF334155),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              (user?.role ?? 'Super Admin').toUpperCase(),
+                              style: const TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF38BDF8),
+                                letterSpacing: 0.5,
+                              ),
                             ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
           ],

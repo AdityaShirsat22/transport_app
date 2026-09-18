@@ -12,11 +12,12 @@ import '../../../core/widgets/app_dropdown.dart';
 import '../../../core/widgets/app_text_field.dart';
 import '../../../core/widgets/responsive_layout.dart';
 import '../../../core/widgets/searchable_select_dialog.dart';
+import '../../drivers/presentation/driver_view_model.dart';
 import '../../locations/presentation/location_view_model.dart';
 import '../../parties/presentation/party_view_model.dart';
 import '../../ports_cfs/presentation/port_cfs_view_model.dart';
 import '../../shipping_lines/presentation/shipping_line_view_model.dart';
-import 'assignment_dialog.dart';
+import '../../vehicles/presentation/vehicle_view_model.dart';
 import 'transport_view_model.dart';
 
 class CreateTransportScreen extends ConsumerStatefulWidget {
@@ -29,11 +30,16 @@ class CreateTransportScreen extends ConsumerStatefulWidget {
 class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // Section 1: Container Details
+  // Section 1: Container & Assignment Details
   ContainerSize _containerSize = ContainerSize.size40Ft;
   ShipmentType _shipmentType = ShipmentType.export;
-  final _containerNumberCtrl = TextEditingController(text: 'MSCU5512349');
-  final _sealNumberCtrl = TextEditingController(text: 'SL-78901');
+  final _containerNumberCtrl = TextEditingController();
+  final _sealNumberCtrl = TextEditingController();
+  String? _vehicleId;
+  String? _vehicleNumber;
+  String? _driverId;
+  String? _driverName;
+  String? _driverMobile;
 
   // Section 2: Booking Details
   String? _partyId;
@@ -111,6 +117,16 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
       return;
     }
 
+    if (_vehicleId == null || _driverId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select a Vehicle and Driver'),
+          backgroundColor: AppColors.red,
+        ),
+      );
+      return;
+    }
+
     if (_partyId == null || _bookingPartyId == null || _shippingLineId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -131,6 +147,39 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
       return;
     }
 
+    // Confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm Booking'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Please review the booking details before creating:'),
+            const SizedBox(height: 12),
+            _confirmRow('Booking No.', _bookingNumberCtrl.text.trim().toUpperCase()),
+            _confirmRow('Customer', _partyName ?? '-'),
+            _confirmRow('Vehicle', _vehicleNumber ?? '-'),
+            _confirmRow('Driver', _driverName ?? '-'),
+            _confirmRow('Route', '${_fromLocationName ?? '-'} → ${_toLocationName ?? '-'}'),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Confirm & Create'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
     setState(() => _isSubmitting = true);
 
     try {
@@ -141,7 +190,7 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
             sealNumber: _sealNumberCtrl.text.trim().toUpperCase(),
             partyId: _partyId!,
             partyName: _partyName!,
-            partyMobile: _partyMobile ?? '9820011223',
+            partyMobile: _partyMobile ?? '',
             bookingPartyId: _bookingPartyId!,
             bookingPartyName: _bookingPartyName!,
             shippingLineId: _shippingLineId!,
@@ -153,44 +202,18 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
             toLocationName: _toLocationName!,
             portCfsId: _portCfsId!,
             portCfsName: _portCfsName!,
+            vehicleId: _vehicleId!,
+            vehicleNumber: _vehicleNumber!,
+            driverId: _driverId!,
+            driverName: _driverName!,
+            driverMobile: _driverMobile ?? '',
           );
 
       if (!mounted) return;
       setState(() => _isSubmitting = false);
 
-      final isMobile = ResponsiveLayout.isMobile(context);
-      if (isMobile) {
-        await showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          useSafeArea: true,
-          builder: (sheetCtx) => AssignmentProgressDialog(
-            transport: outcome.transport,
-            wasAssigned: outcome.wasAssigned,
-            failureReason: outcome.failureReason,
-            notificationLog: outcome.notificationLog,
-            onViewDetails: () {
-              Navigator.of(sheetCtx).pop();
-              context.go('/transport/${outcome.transport.id}');
-            },
-          ),
-        );
-      } else {
-        await showDialog(
-          context: context,
-          barrierDismissible: false,
-          builder: (dialogCtx) => AssignmentProgressDialog(
-            transport: outcome.transport,
-            wasAssigned: outcome.wasAssigned,
-            failureReason: outcome.failureReason,
-            notificationLog: outcome.notificationLog,
-            onViewDetails: () {
-              Navigator.of(dialogCtx).pop();
-              context.go('/transport/${outcome.transport.id}');
-            },
-          ),
-        );
-      }
+      // Navigate directly to the new transport's details page
+      context.go('/transport/${outcome.transport.id}');
     } catch (e) {
       if (!mounted) return;
       setState(() => _isSubmitting = false);
@@ -203,12 +226,30 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
     }
   }
 
+  Widget _confirmRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(label, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+          ),
+          Expanded(child: Text(value, style: const TextStyle(fontSize: 13))),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final parties = ref.watch(partyViewModelProvider).parties;
     final shippingLines = ref.watch(shippingLineViewModelProvider).shippingLines;
     final locations = ref.watch(locationViewModelProvider).locations;
     final portCfsList = ref.watch(portCfsViewModelProvider).items;
+    final vehicles = ref.watch(vehicleViewModelProvider).vehicles;
+    final drivers = ref.watch(driverViewModelProvider).drivers;
     final isMobile = ResponsiveLayout.isMobile(context);
 
     return Scaffold(
@@ -225,7 +266,7 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
             border: Border(top: BorderSide(color: AppColors.border)),
           ),
           child: AppButton(
-            text: isMobile ? 'CREATE & AUTO-ASSIGN' : 'CREATE BOOKING & AUTO-ASSIGN',
+            text: 'CREATE BOOKING',
             icon: Icons.check,
             height: 48,
             isLoading: _isSubmitting,
@@ -240,30 +281,7 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Notice Card
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: AppColors.blueLight,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.auto_mode, color: AppColors.accent, size: 22),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Deterministic Auto-Assignment: The system automatically matches an available vehicle & driver based on container size.',
-                        style: AppTextStyles.bodySmall.copyWith(color: AppColors.primary),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // Section 1 — Container Details
+              // Section 1 — Container & Assignment Details
               AppCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -273,12 +291,12 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
                         const Icon(Icons.inventory_2_outlined, color: AppColors.accent, size: 20),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text('Section 1 — Container Details', style: AppTextStyles.headingSmall, overflow: TextOverflow.ellipsis),
+                          child: Text('Section 1 — Container & Assignment Details', style: AppTextStyles.headingSmall, overflow: TextOverflow.ellipsis),
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text('Specify container specifications and custom seals', style: AppTextStyles.bodySmall),
+                    Text('Specify container specs, assign vehicle and driver', style: AppTextStyles.bodySmall),
                     const Divider(height: 20),
                     if (isMobile) ...[
                       AppDropdown<ContainerSize>(
@@ -337,16 +355,60 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
                         ],
                       ),
                     const SizedBox(height: 14),
+                    // Vehicle selector
+                    SearchableSelectField<String>(
+                      label: 'Vehicle',
+                      hint: 'Select vehicle',
+                      value: _vehicleId,
+                      selectedDisplay: _vehicleNumber,
+                      isRequired: true,
+                      items: vehicles.map((v) {
+                        return SearchableSelectItem(
+                          value: v.id,
+                          title: v.vehicleNumber,
+                          subtitle: '${v.vehicleType} • ${v.capacity} • ${v.status.label}',
+                        );
+                      }).toList(),
+                      onSelected: (id) {
+                        final selected = vehicles.firstWhere((v) => v.id == id);
+                        setState(() {
+                          _vehicleId = id;
+                          _vehicleNumber = selected.vehicleNumber;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    // Driver selector
+                    SearchableSelectField<String>(
+                      label: 'Driver',
+                      hint: 'Select driver',
+                      value: _driverId,
+                      selectedDisplay: _driverName,
+                      isRequired: true,
+                      items: drivers.map((d) {
+                        return SearchableSelectItem(
+                          value: d.id,
+                          title: d.name,
+                          subtitle: '${d.mobileNumber} • ${d.status.label}',
+                        );
+                      }).toList(),
+                      onSelected: (id) {
+                        final selected = drivers.firstWhere((d) => d.id == id);
+                        setState(() {
+                          _driverId = id;
+                          _driverName = selected.name;
+                          _driverMobile = selected.mobileNumber;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 14),
                     AppTextField(
                       label: 'Container Number',
-                      hint: 'e.g. MSCU1234567',
+                      hint: 'e.g. MSCU1234567 (Optional)',
                       controller: _containerNumberCtrl,
-                      isRequired: true,
+                      isRequired: false,
                       validator: (val) {
-                        if (val == null || val.trim().isEmpty) {
-                          return 'Container number is required';
-                        }
-                        if (val.trim().length < 8) {
+                        if (val != null && val.trim().isNotEmpty && val.trim().length < 4) {
                           return 'Standard container format required';
                         }
                         return null;
@@ -355,15 +417,10 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
                     const SizedBox(height: 14),
                     AppTextField(
                       label: 'Custom Seal Number',
-                      hint: 'e.g. SL-98234',
+                      hint: 'e.g. SL-98234 (Optional)',
                       controller: _sealNumberCtrl,
-                      isRequired: true,
-                      validator: (val) {
-                        if (val == null || val.trim().isEmpty) {
-                          return 'Seal number is required';
-                        }
-                        return null;
-                      },
+                      isRequired: false,
+                      validator: (val) => null,
                     ),
                   ],
                 ),

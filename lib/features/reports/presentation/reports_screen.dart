@@ -228,7 +228,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> with SingleTicker
                   DataCell(Text(DateFormatter.formatShortDate(t.date))),
                   DataCell(Text(t.transportId, style: AppTextStyles.labelMedium.copyWith(color: AppColors.accent))),
                   DataCell(Text(t.bookingNumber)),
-                  DataCell(Text(t.containerNumber, style: AppTextStyles.codeMono)),
+                  DataCell(Text(t.containerNumber.isNotEmpty ? t.containerNumber : '—', style: AppTextStyles.codeMono)),
                   DataCell(Text(t.customer)),
                   DataCell(Text(t.vehicle)),
                   DataCell(Text(t.driver)),

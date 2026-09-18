@@ -1,9 +1,11 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../core/enums/transport_status.dart';
+import '../../../core/services/pod_service.dart';
 import '../../../core/utils/date_formatter.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_card.dart';
@@ -98,7 +100,9 @@ class TransportDetailsScreen extends ConsumerWidget {
 
   void _showUploadPodSheet(BuildContext context, WidgetRef ref, Transport transport) {
     String docType = 'PDF';
-    final ctrl = TextEditingController(text: 'POD_${transport.containerNumber}_Signed.pdf');
+    final cntrDoc = transport.containerNumber.isNotEmpty ? transport.containerNumber : transport.bookingNumber;
+    final ctrl = TextEditingController(text: 'POD_${cntrDoc}_Signed.pdf');
+    File? pickedFile;
 
     showModalBottomSheet(
       context: context,
@@ -132,6 +136,31 @@ class TransportDetailsScreen extends ConsumerWidget {
               const SizedBox(height: 6),
               Text('Attach verified delivery slip or signed gate pass:', style: AppTextStyles.bodySmall),
               const SizedBox(height: 14),
+              // File Picker Button
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 44),
+                ),
+                icon: const Icon(Icons.folder_open, size: 20),
+                label: Text(
+                  pickedFile != null
+                      ? 'Selected: ${pickedFile!.path.split(Platform.pathSeparator).last}'
+                      : 'Choose Document from Device (PDF / Image)',
+                  overflow: TextOverflow.ellipsis,
+                ),
+                onPressed: () async {
+                  final file = await ref.read(podServiceProvider).pickPodFile();
+                  if (file != null) {
+                    setSheetState(() {
+                      pickedFile = file;
+                      final name = file.path.split(Platform.pathSeparator).last;
+                      ctrl.text = name;
+                      docType = name.toLowerCase().endsWith('.pdf') ? 'PDF' : 'IMAGE';
+                    });
+                  }
+                },
+              ),
+              const SizedBox(height: 14),
               Row(
                 children: [
                   ChoiceChip(
@@ -140,18 +169,18 @@ class TransportDetailsScreen extends ConsumerWidget {
                     onSelected: (val) {
                       setSheetState(() {
                         docType = 'PDF';
-                        ctrl.text = 'POD_${transport.containerNumber}_Signed.pdf';
+                        ctrl.text = 'POD_${cntrDoc}_Signed.pdf';
                       });
                     },
                   ),
                   const SizedBox(width: 10),
                   ChoiceChip(
-                    label: const Text('Camera Photo'),
+                    label: const Text('Camera Photo / Scan'),
                     selected: docType == 'IMAGE',
                     onSelected: (val) {
                       setSheetState(() {
                         docType = 'IMAGE';
-                        ctrl.text = 'POD_${transport.containerNumber}_Photo.jpg';
+                        ctrl.text = 'POD_${cntrDoc}_Photo.jpg';
                       });
                     },
                   ),
@@ -171,20 +200,30 @@ class TransportDetailsScreen extends ConsumerWidget {
                 child: ElevatedButton.icon(
                   icon: const Icon(Icons.cloud_upload_outlined),
                   label: const Text('Upload & Confirm POD'),
-                  onPressed: () {
+                  onPressed: () async {
                     Navigator.of(sheetCtx).pop();
-                    ref.read(transportViewModelProvider.notifier).uploadPod(
-                          transportId: transport.id,
-                          fileName: ctrl.text.trim(),
-                          fileType: docType,
-                          fileSize: 1024 * 350,
-                        );
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('POD successfully verified and attached!'),
-                        backgroundColor: AppColors.green,
-                      ),
-                    );
+                    if (pickedFile != null) {
+                      await ref.read(podServiceProvider).processPodUpload(
+                            transportId: transport.id,
+                            file: pickedFile!,
+                          );
+                      ref.read(transportViewModelProvider.notifier).loadTransports();
+                    } else {
+                      ref.read(transportViewModelProvider.notifier).uploadPod(
+                            transportId: transport.id,
+                            fileName: ctrl.text.trim(),
+                            fileType: docType,
+                            fileSize: 1024 * 350,
+                          );
+                    }
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text('POD successfully verified, stored, and attached!'),
+                          backgroundColor: AppColors.green,
+                        ),
+                      );
+                    }
                   },
                 ),
               ),
@@ -441,13 +480,18 @@ class TransportDetailsScreen extends ConsumerWidget {
           children: [
             Text(transport.id, style: AppTextStyles.headingSmall),
             Text(
-              '${transport.containerNumber} • ${transport.partyName}',
+              '${transport.containerNumber.isNotEmpty ? transport.containerNumber : transport.bookingNumber} • ${transport.partyName}',
               style: AppTextStyles.bodySmall.copyWith(fontSize: 11, color: AppColors.textMuted),
               overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_outline, color: AppColors.red),
+            tooltip: 'Delete Transport',
+            onPressed: () => _confirmDeleteTransport(context, ref, transport),
+          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert),
             onSelected: (val) {
@@ -455,6 +499,7 @@ class TransportDetailsScreen extends ConsumerWidget {
               if (val == 'reassign') _showReassignSheet(context, transport);
               if (val == 'pod') _showUploadPodSheet(context, ref, transport);
               if (val == 'exception') _showExceptionSheet(context, ref, transport);
+              if (val == 'delete') _confirmDeleteTransport(context, ref, transport);
             },
             itemBuilder: (ctx) => [
               const PopupMenuItem(
@@ -501,6 +546,17 @@ class TransportDetailsScreen extends ConsumerWidget {
                   ),
                 ),
               ],
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                value: 'delete',
+                child: Row(
+                  children: [
+                    Icon(Icons.delete_outline, size: 18, color: AppColors.red),
+                    SizedBox(width: 10),
+                    Text('Delete Transport', style: TextStyle(color: AppColors.red)),
+                  ],
+                ),
+              ),
             ],
           ),
         ],
@@ -610,9 +666,9 @@ class TransportDetailsScreen extends ConsumerWidget {
                 children: [
                   Text('Container & Route', style: AppTextStyles.headingSmall),
                   const Divider(height: 16),
-                  _buildDetailRow('Container Number', transport.containerNumber),
+                  _buildDetailRow('Container Number', transport.containerNumber.isNotEmpty ? transport.containerNumber : '— (Pending)'),
                   _buildDetailRow('Size & Type', '${transport.containerSize.label} • ${transport.shipmentType.label}'),
-                  _buildDetailRow('Custom Seal No', transport.sealNumber),
+                  _buildDetailRow('Custom Seal No', transport.sealNumber.isNotEmpty ? transport.sealNumber : '— (Pending)'),
                   _buildDetailRow('Customer', transport.partyName),
                   _buildDetailRow('Shipping Line', transport.shippingLineName),
                   _buildDetailRow('Origin (From)', transport.fromLocationName),
@@ -977,6 +1033,40 @@ class TransportDetailsScreen extends ConsumerWidget {
               value,
               style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w500),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteTransport(BuildContext context, WidgetRef ref, Transport t) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Transport Booking'),
+        content: Text(
+          'Are you sure you want to delete transport booking #${t.bookingNumber} (${t.id})?\n\n'
+          'Assigned vehicle and driver (if any) will be released. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              ref.read(transportViewModelProvider.notifier).deleteTransport(t.id);
+              context.go('/transport');
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Transport #${t.bookingNumber} deleted successfully'),
+                  backgroundColor: AppColors.green,
+                ),
+              );
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

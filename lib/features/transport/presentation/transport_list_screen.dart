@@ -137,7 +137,7 @@ class TransportListScreen extends ConsumerWidget {
                 separatorBuilder: (context, index) => const SizedBox(height: 12),
                 itemBuilder: (ctx, i) {
                   final t = transports[i];
-                  return _buildTransportCard(context, t);
+                  return _buildTransportCard(context, ref, t);
                 },
               )
             else
@@ -161,6 +161,7 @@ class TransportListScreen extends ConsumerWidget {
                         DataColumn(label: Text('Route', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text('Created Date', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
                       ],
                       rows: transports.map((t) {
                         return DataRow(
@@ -173,7 +174,7 @@ class TransportListScreen extends ConsumerWidget {
                               ),
                             ),
                             DataCell(Text(t.bookingNumber, style: AppTextStyles.bodyMedium)),
-                            DataCell(Text(t.containerNumber, style: AppTextStyles.codeMono)),
+                            DataCell(Text(t.containerNumber.isNotEmpty ? t.containerNumber : '—', style: AppTextStyles.codeMono)),
                             DataCell(
                               ConstrainedBox(
                                 constraints: const BoxConstraints(maxWidth: 160),
@@ -203,6 +204,13 @@ class TransportListScreen extends ConsumerWidget {
                             DataCell(Text('${t.fromLocationName} → ${t.toLocationName}', style: AppTextStyles.bodySmall)),
                             DataCell(StatusBadge.fromTransport(t.status)),
                             DataCell(Text(DateFormatter.formatShortDate(t.createdAt), style: AppTextStyles.bodySmall)),
+                            DataCell(
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.red),
+                                tooltip: 'Delete Transport',
+                                onPressed: () => _confirmDeleteTransport(context, ref, t),
+                              ),
+                            ),
                           ],
                         );
                       }).toList(),
@@ -217,7 +225,7 @@ class TransportListScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildTransportCard(BuildContext context, Transport t) {
+  Widget _buildTransportCard(BuildContext context, WidgetRef ref, Transport t) {
     return AppCard(
       onTap: () => context.go('/transport/${t.id}'),
       padding: const EdgeInsets.all(14),
@@ -255,7 +263,7 @@ class TransportListScreen extends ConsumerWidget {
               const SizedBox(width: 8),
               const Icon(Icons.inventory_2_outlined, size: 14, color: AppColors.textSecondary),
               const SizedBox(width: 4),
-              Text(t.containerNumber, style: AppTextStyles.codeMono.copyWith(fontWeight: FontWeight.bold, fontSize: 12)),
+              Text(t.containerNumber.isNotEmpty ? t.containerNumber : 'NO CONTAINER', style: AppTextStyles.codeMono.copyWith(fontWeight: FontWeight.bold, fontSize: 12)),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
@@ -306,18 +314,57 @@ class TransportListScreen extends ConsumerWidget {
                   ],
                 ),
               ),
-              const Row(
+              Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
+                  IconButton(
+                    icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.red),
+                    tooltip: 'Delete Transport',
+                    onPressed: () => _confirmDeleteTransport(context, ref, t),
+                  ),
+                  const SizedBox(width: 4),
+                  const Text(
                     'Details',
                     style: TextStyle(color: AppColors.accent, fontSize: 12, fontWeight: FontWeight.w600),
                   ),
-                  SizedBox(width: 2),
-                  Icon(Icons.chevron_right, size: 18, color: AppColors.accent),
+                  const SizedBox(width: 2),
+                  const Icon(Icons.chevron_right, size: 18, color: AppColors.accent),
                 ],
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteTransport(BuildContext context, WidgetRef ref, Transport t) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Transport Booking'),
+        content: Text(
+          'Are you sure you want to delete transport booking #${t.bookingNumber} (${t.id})?\n\n'
+          'Assigned vehicle and driver (if any) will be released. This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              ref.read(transportViewModelProvider.notifier).deleteTransport(t.id);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Transport #${t.bookingNumber} deleted successfully'),
+                  backgroundColor: AppColors.green,
+                ),
+              );
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

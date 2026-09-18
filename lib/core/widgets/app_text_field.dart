@@ -16,6 +16,7 @@ class AppTextField extends StatelessWidget {
   final VoidCallback? onTap;
   final int maxLines;
   final bool isRequired;
+  final bool obscureText;
 
   const AppTextField({
     super.key,
@@ -32,6 +33,7 @@ class AppTextField extends StatelessWidget {
     this.onTap,
     this.maxLines = 1,
     this.isRequired = false,
+    this.obscureText = false,
   });
 
   @override
@@ -61,6 +63,7 @@ class AppTextField extends StatelessWidget {
         TextFormField(
           controller: controller,
           initialValue: initialValue,
+          obscureText: obscureText,
           validator: validator,
           onChanged: onChanged,
           keyboardType: keyboardType,

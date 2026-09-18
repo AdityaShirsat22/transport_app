@@ -183,10 +183,20 @@ class ShippingLineListScreen extends ConsumerWidget {
                             ],
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined, size: 20),
-                          tooltip: 'Edit Line',
-                          onPressed: () => _showEditDialog(context, ref, line),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, size: 20),
+                              tooltip: 'Edit Line',
+                              onPressed: () => _showEditDialog(context, ref, line),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.red),
+                              tooltip: 'Delete Line',
+                              onPressed: () => _confirmDelete(context, ref, line),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -214,9 +224,18 @@ class ShippingLineListScreen extends ConsumerWidget {
                             DataCell(Text(line.name, style: AppTextStyles.labelLarge)),
                             DataCell(Text(line.code, style: AppTextStyles.codeMono)),
                             DataCell(
-                              IconButton(
-                                icon: const Icon(Icons.edit_outlined, size: 18),
-                                onPressed: () => _showEditDialog(context, ref, line),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_outlined, size: 18),
+                                    onPressed: () => _showEditDialog(context, ref, line),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.red),
+                                    tooltip: 'Delete Line',
+                                    onPressed: () => _confirmDelete(context, ref, line),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -229,6 +248,33 @@ class ShippingLineListScreen extends ConsumerWidget {
             SizedBox(height: isMobile ? 80 : 20),
           ],
         ),
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, WidgetRef ref, ShippingLine line) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Shipping Line'),
+        content: Text('Are you sure you want to delete shipping carrier "${line.name}" (${line.code})? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              ref.read(shippingLineViewModelProvider.notifier).deleteShippingLine(line.id);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Shipping line "${line.name}" deleted successfully'), backgroundColor: AppColors.green),
+              );
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }

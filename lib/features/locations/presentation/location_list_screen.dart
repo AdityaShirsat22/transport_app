@@ -206,10 +206,20 @@ class LocationListScreen extends ConsumerWidget {
                             ],
                           ),
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.edit_outlined, size: 20),
-                          tooltip: 'Edit Location',
-                          onPressed: () => _showEditDialog(context, ref, loc),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, size: 20),
+                              tooltip: 'Edit Location',
+                              onPressed: () => _showEditDialog(context, ref, loc),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.red),
+                              tooltip: 'Delete Location',
+                              onPressed: () => _confirmDelete(context, ref, loc),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -237,9 +247,18 @@ class LocationListScreen extends ConsumerWidget {
                             DataCell(Text(loc.name, style: AppTextStyles.labelLarge)),
                             DataCell(Text(loc.type.label, style: AppTextStyles.bodyMedium)),
                             DataCell(
-                              IconButton(
-                                icon: const Icon(Icons.edit_outlined, size: 18),
-                                onPressed: () => _showEditDialog(context, ref, loc),
+                              Row(
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_outlined, size: 18),
+                                    onPressed: () => _showEditDialog(context, ref, loc),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.red),
+                                    tooltip: 'Delete Location',
+                                    onPressed: () => _confirmDelete(context, ref, loc),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -252,6 +271,33 @@ class LocationListScreen extends ConsumerWidget {
             SizedBox(height: isMobile ? 80 : 20),
           ],
         ),
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, WidgetRef ref, Location loc) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Location'),
+        content: Text('Are you sure you want to delete location "${loc.name}"? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              ref.read(locationViewModelProvider.notifier).deleteLocation(loc.id);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('Location "${loc.name}" deleted successfully'), backgroundColor: AppColors.green),
+              );
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }

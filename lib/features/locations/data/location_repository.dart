@@ -1,5 +1,9 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:drift/drift.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../shared/mock_data/demo_seed_data.dart';
+import '../../../core/database/app_database.dart';
+import '../../../core/enums/location_type.dart';
 import '../domain/location_model.dart';
 
 abstract class LocationRepository {
@@ -8,13 +12,54 @@ abstract class LocationRepository {
   void add(Location location);
   void update(Location location);
   void delete(String id);
+  Future<void> reloadFromDatabase();
 }
 
-class MockLocationRepository implements LocationRepository {
+class ProductionLocationRepository implements LocationRepository {
+  final AppDatabase _db;
   final List<Location> _locations = [];
+  final Completer<void> _initCompleter = Completer<void>();
 
-  MockLocationRepository() {
-    _locations.addAll(DemoSeedData.getLocations());
+  Future<void> get initialized => _initCompleter.future;
+
+  ProductionLocationRepository(this._db) {
+    _init();
+  }
+
+  Future<void> _init() async {
+    try {
+      await reloadFromDatabase();
+    } catch (_) {
+      // Safe fallback
+    } finally {
+      if (!_initCompleter.isCompleted) _initCompleter.complete();
+    }
+  }
+
+  @override
+  Future<void> reloadFromDatabase() async {
+    try {
+      final rows = await (_db.select(_db.localLocations)
+            ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
+          .get();
+
+      if (rows.isNotEmpty) {
+        _locations.clear();
+        for (final row in rows) {
+          _locations.add(
+            Location(
+              id: row.id,
+              name: row.name,
+              type: LocationType.fromString(row.locationType),
+              isActive: row.isActive,
+              createdAt: row.createdAt,
+            ),
+          );
+        }
+      }
+    } catch (_) {
+      // Safe fallback
+    }
   }
 
   @override
@@ -31,7 +76,9 @@ class MockLocationRepository implements LocationRepository {
 
   @override
   void add(Location location) {
-    _locations.add(location);
+    _locations.insert(0, location);
+    _persistToDb(location);
+    _enqueueSync(location, 'CREATE');
   }
 
   @override
@@ -39,15 +86,73 @@ class MockLocationRepository implements LocationRepository {
     final index = _locations.indexWhere((l) => l.id == location.id);
     if (index != -1) {
       _locations[index] = location;
+      _persistToDb(location);
+      _enqueueSync(location, 'UPDATE');
     }
   }
 
   @override
   void delete(String id) {
-    _locations.removeWhere((l) => l.id == id);
+    final index = _locations.indexWhere((l) => l.id == id);
+    if (index != -1) {
+      _locations.removeAt(index);
+      _deleteFromDb(id);
+      _enqueueSyncDelete(id);
+    }
+  }
+
+  Future<void> _deleteFromDb(String id) async {
+    try {
+      await (_db.delete(_db.localLocations)..where((t) => t.id.equals(id))).go();
+    } catch (_) {}
+  }
+
+  void _enqueueSyncDelete(String id) {
+    _db.enqueueSync(
+      id: 'sync-loc-del-${DateTime.now().millisecondsSinceEpoch}-$id',
+      entityType: 'location',
+      entityId: id,
+      operation: 'DELETE',
+      payload: jsonEncode({'id': id}),
+    );
+  }
+
+  Future<void> _persistToDb(Location l) async {
+    try {
+      await _db.into(_db.localLocations).insertOnConflictUpdate(
+            LocalLocationsCompanion(
+              id: Value(l.id),
+              name: Value(l.name),
+              locationType: Value(l.type.name),
+              isActive: Value(l.isActive),
+              createdAt: Value(l.createdAt),
+              updatedAt: Value(DateTime.now()),
+            ),
+          );
+    } catch (_) {
+      // Safe fallback
+    }
+  }
+
+  void _enqueueSync(Location l, String op) {
+    _db.enqueueSync(
+      id: 'sync-loc-${DateTime.now().millisecondsSinceEpoch}-${l.id}',
+      entityType: 'location',
+      entityId: l.id,
+      operation: op,
+      payload: jsonEncode({
+        'id': l.id,
+        'name': l.name,
+        'location_type': l.type.name,
+        'is_active': l.isActive,
+        'created_at': l.createdAt.toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      }),
+    );
   }
 }
 
 final locationRepositoryProvider = Provider<LocationRepository>((ref) {
-  return MockLocationRepository();
+  final db = ref.watch(appDatabaseProvider);
+  return ProductionLocationRepository(db);
 });

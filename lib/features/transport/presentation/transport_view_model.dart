@@ -5,9 +5,6 @@ import '../../../core/enums/transport_status.dart';
 import '../../../core/services/assignment_service.dart';
 import '../../../core/services/notification_service.dart';
 import '../../../core/utils/id_generator.dart';
-import '../../drivers/presentation/driver_view_model.dart';
-import '../../parties/presentation/party_view_model.dart';
-import '../../vehicles/presentation/vehicle_view_model.dart';
 import '../data/transport_repository.dart';
 import '../domain/activity_log.dart';
 import '../domain/notification_log.dart';
@@ -129,23 +126,16 @@ class TransportViewModel extends StateNotifier<TransportState> {
   final TransportRepository _repo;
   final AssignmentService _assignmentService;
   final NotificationService _notificationService;
-  final Ref _ref;
-
   TransportViewModel(
     this._repo,
     this._assignmentService,
     this._notificationService,
-    this._ref,
   ) : super(const TransportState()) {
     state = state.copyWith(transports: _repo.getAll());
   }
 
   void loadTransports() {
     state = state.copyWith(transports: _repo.getAll());
-    // Refresh vehicle & driver & party stats
-    _ref.read(vehicleViewModelProvider.notifier).loadVehicles();
-    _ref.read(driverViewModelProvider.notifier).loadDrivers();
-    _ref.read(partyViewModelProvider.notifier).loadParties();
   }
 
   void setSearchQuery(String query) => state = state.copyWith(searchQuery: query);
@@ -166,7 +156,7 @@ class TransportViewModel extends StateNotifier<TransportState> {
   List<ActivityLog> getActivityLogs(String transportId) => _repo.getActivityLogs(transportId);
   List<NotificationLog> getNotificationLogs(String transportId) => _repo.getNotificationLogs(transportId);
 
-  /// Create booking and run auto-assignment
+  /// Create booking with manually selected vehicle and driver
   Future<BookingCreationOutcome> createBooking({
     required ContainerSize containerSize,
     required ShipmentType shipmentType,
@@ -186,151 +176,91 @@ class TransportViewModel extends StateNotifier<TransportState> {
     required String toLocationName,
     required String portCfsId,
     required String portCfsName,
+    required String vehicleId,
+    required String vehicleNumber,
+    required String driverId,
+    required String driverName,
+    required String driverMobile,
   }) async {
     final now = DateTime.now();
     final transportId = IdGenerator.generateTransportId();
 
-    // 1. Check assignment
-    final assignmentResult = _assignmentService.attemptAutoAssignment(containerSize.code);
+    // Create transport with manually provided vehicle & driver
+    final transport = Transport(
+      id: transportId,
+      bookingNumber: bookingNumber,
+      containerNumber: containerNumber.trim().toUpperCase(),
+      sealNumber: sealNumber.trim().toUpperCase(),
+      containerSize: containerSize,
+      shipmentType: shipmentType,
+      partyId: partyId,
+      partyName: partyName,
+      bookingPartyId: bookingPartyId,
+      bookingPartyName: bookingPartyName,
+      shippingLineId: shippingLineId,
+      shippingLineName: shippingLineName,
+      fromLocationId: fromLocationId,
+      fromLocationName: fromLocationName,
+      toLocationId: toLocationId,
+      toLocationName: toLocationName,
+      portCfsId: portCfsId,
+      portCfsName: portCfsName,
+      vehicleId: vehicleId,
+      vehicleNumber: vehicleNumber,
+      driverId: driverId,
+      driverName: driverName,
+      driverMobile: driverMobile,
+      status: TransportStatus.driverAssigned,
+      createdAt: now,
+      updatedAt: now,
+    );
 
-    Transport transport;
-    NotificationLog? notifLog;
+    _repo.add(transport);
 
-    if (assignmentResult.isSuccess &&
-        assignmentResult.vehicle != null &&
-        assignmentResult.driver != null) {
-      // Success: Status -> VEHICLE_ASSIGNED / DRIVER_ASSIGNED
-      transport = Transport(
-        id: transportId,
-        bookingNumber: bookingNumber,
-        containerNumber: containerNumber.trim().toUpperCase(),
-        sealNumber: sealNumber.trim().toUpperCase(),
-        containerSize: containerSize,
-        shipmentType: shipmentType,
-        partyId: partyId,
-        partyName: partyName,
-        bookingPartyId: bookingPartyId,
-        bookingPartyName: bookingPartyName,
-        shippingLineId: shippingLineId,
-        shippingLineName: shippingLineName,
-        fromLocationId: fromLocationId,
-        fromLocationName: fromLocationName,
-        toLocationId: toLocationId,
-        toLocationName: toLocationName,
-        portCfsId: portCfsId,
-        portCfsName: portCfsName,
-        vehicleId: assignmentResult.vehicle!.id,
-        vehicleNumber: assignmentResult.vehicle!.vehicleNumber,
-        driverId: assignmentResult.driver!.id,
-        driverName: assignmentResult.driver!.name,
-        driverMobile: assignmentResult.driver!.mobileNumber,
-        status: TransportStatus.driverAssigned,
-        createdAt: now,
-        updatedAt: now,
-      );
+    _assignmentService.assignSpecific(
+      vehicleId: vehicleId,
+      vehicleNumber: vehicleNumber,
+      driverId: driverId,
+      driverName: driverName,
+      transportId: transportId,
+    );
 
-      _repo.add(transport);
-
-      // Audit logs
-      _repo.addActivityLog(
-        ActivityLog(
-          id: 'act-${DateTime.now().millisecondsSinceEpoch}-1',
-          transportId: transport.id,
-          title: 'Booking Created',
-          description: 'Booking $bookingNumber registered for container $containerNumber',
-          timestamp: now,
-        ),
-      );
-      _repo.addActivityLog(
-        ActivityLog(
-          id: 'act-${DateTime.now().millisecondsSinceEpoch}-2',
-          transportId: transport.id,
-          title: 'Vehicle Auto-Assigned',
-          description: 'Assigned ${assignmentResult.vehicle!.vehicleType} ${assignmentResult.vehicle!.vehicleNumber}',
-          timestamp: now,
-        ),
-      );
-      _repo.addActivityLog(
-        ActivityLog(
-          id: 'act-${DateTime.now().millisecondsSinceEpoch}-3',
-          transportId: transport.id,
-          title: 'Driver Auto-Assigned',
-          description: 'Assigned Driver ${assignmentResult.driver!.name} (${assignmentResult.driver!.mobileNumber})',
-          timestamp: now,
-        ),
-      );
-
-      // Notification
-      notifLog = await _notificationService.sendVehicleAssignmentNotification(
-        transport,
-        recipientPhone: partyMobile,
-      );
-
-      _repo.addActivityLog(
-        ActivityLog(
-          id: 'act-${DateTime.now().millisecondsSinceEpoch}-4',
-          transportId: transport.id,
-          title: 'Customer Notification Sent',
-          description: 'Automated dispatch message transmitted to customer WhatsApp',
-          timestamp: now,
-        ),
-      );
-    } else {
-      // Pending
-      transport = Transport(
-        id: transportId,
-        bookingNumber: bookingNumber,
-        containerNumber: containerNumber.trim().toUpperCase(),
-        sealNumber: sealNumber.trim().toUpperCase(),
-        containerSize: containerSize,
-        shipmentType: shipmentType,
-        partyId: partyId,
-        partyName: partyName,
-        bookingPartyId: bookingPartyId,
-        bookingPartyName: bookingPartyName,
-        shippingLineId: shippingLineId,
-        shippingLineName: shippingLineName,
-        fromLocationId: fromLocationId,
-        fromLocationName: fromLocationName,
-        toLocationId: toLocationId,
-        toLocationName: toLocationName,
-        portCfsId: portCfsId,
-        portCfsName: portCfsName,
-        status: TransportStatus.vehiclePending,
-        createdAt: now,
-        updatedAt: now,
-        exceptionReason: assignmentResult.failureReason,
-      );
-
-      _repo.add(transport);
-
-      _repo.addActivityLog(
-        ActivityLog(
-          id: 'act-${DateTime.now().millisecondsSinceEpoch}-1',
-          transportId: transport.id,
-          title: 'Booking Created',
-          description: 'Booking $bookingNumber registered',
-          timestamp: now,
-        ),
-      );
-      _repo.addActivityLog(
-        ActivityLog(
-          id: 'act-${DateTime.now().millisecondsSinceEpoch}-2',
-          transportId: transport.id,
-          title: 'Vehicle Pending',
-          description: assignmentResult.failureReason ?? 'No suitable vehicle available',
-          timestamp: now,
-        ),
-      );
-    }
+    // Audit logs
+    _repo.addActivityLog(
+      ActivityLog(
+        id: 'act-${DateTime.now().millisecondsSinceEpoch}-1',
+        transportId: transport.id,
+        title: 'Booking Created',
+        description:
+            'Booking $bookingNumber registered${containerNumber.isNotEmpty ? " for container $containerNumber" : ""}',
+        timestamp: now,
+      ),
+    );
+    _repo.addActivityLog(
+      ActivityLog(
+        id: 'act-${DateTime.now().millisecondsSinceEpoch}-2',
+        transportId: transport.id,
+        title: 'Vehicle Assigned',
+        description: 'Vehicle $vehicleNumber assigned manually',
+        timestamp: now,
+      ),
+    );
+    _repo.addActivityLog(
+      ActivityLog(
+        id: 'act-${DateTime.now().millisecondsSinceEpoch}-3',
+        transportId: transport.id,
+        title: 'Driver Assigned',
+        description: 'Driver $driverName ($driverMobile) assigned manually',
+        timestamp: now,
+      ),
+    );
 
     loadTransports();
 
     return BookingCreationOutcome(
       transport: transport,
-      wasAssigned: assignmentResult.isSuccess,
-      failureReason: assignmentResult.failureReason,
-      notificationLog: notifLog,
+      wasAssigned: true,
+      notificationLog: null,
     );
   }
 
@@ -343,13 +273,13 @@ class TransportViewModel extends StateNotifier<TransportState> {
 
     // If cancelled, release vehicle and driver
     if (newStatus == TransportStatus.cancelled) {
-      _assignmentService.releaseVehicle(current.vehicleId);
-      _assignmentService.releaseDriver(current.driverId);
+      _assignmentService.releaseVehicle(current.vehicleId, transportId: transportId);
+      _assignmentService.releaseDriver(current.driverId, transportId: transportId);
     }
 
     // If vehicle breakdown, release vehicle so it can be serviced
     if (newStatus == TransportStatus.vehicleBreakdown) {
-      _assignmentService.releaseVehicle(current.vehicleId);
+      _assignmentService.releaseVehicle(current.vehicleId, transportId: transportId);
     }
 
     _repo.addActivityLog(
@@ -404,8 +334,8 @@ class TransportViewModel extends StateNotifier<TransportState> {
     _repo.completeTransport(transportId);
 
     // Release vehicle & driver back to AVAILABLE
-    _assignmentService.releaseVehicle(current.vehicleId);
-    _assignmentService.releaseDriver(current.driverId);
+    _assignmentService.releaseVehicle(current.vehicleId, transportId: transportId);
+    _assignmentService.releaseDriver(current.driverId, transportId: transportId);
 
     _repo.addActivityLog(
       ActivityLog(
@@ -426,6 +356,7 @@ class TransportViewModel extends StateNotifier<TransportState> {
     if (current == null) return;
 
     final newVeh = _assignmentService.reassignVehicle(
+      transportId: transportId,
       oldVehicleId: current.vehicleId,
       newVehicleId: newVehicleId,
       driverId: current.driverId,
@@ -463,6 +394,7 @@ class TransportViewModel extends StateNotifier<TransportState> {
     if (current == null) return;
 
     final newDrv = _assignmentService.reassignDriver(
+      transportId: transportId,
       oldDriverId: current.driverId,
       newDriverId: newDriverId,
       vehicleId: current.vehicleId,
@@ -490,6 +422,21 @@ class TransportViewModel extends StateNotifier<TransportState> {
       loadTransports();
     }
   }
+
+  /// Delete a transport operation
+  void deleteTransport(String id) {
+    final current = _repo.getById(id);
+    if (current != null) {
+      if (current.vehicleId != null) {
+        _assignmentService.releaseVehicle(current.vehicleId, transportId: id);
+      }
+      if (current.driverId != null) {
+        _assignmentService.releaseDriver(current.driverId, transportId: id);
+      }
+    }
+    _repo.delete(id);
+    loadTransports();
+  }
 }
 
 final transportViewModelProvider =
@@ -501,6 +448,5 @@ final transportViewModelProvider =
     repo,
     assignmentService,
     notificationService,
-    ref,
   );
 });

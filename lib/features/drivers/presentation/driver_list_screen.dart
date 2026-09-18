@@ -291,10 +291,20 @@ class DriverListScreen extends ConsumerWidget {
                               icon: const Icon(Icons.swap_vert, size: 16),
                               label: const Text('Status'),
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.edit_outlined, size: 20),
-                              tooltip: 'Edit Driver',
-                              onPressed: () => _showEditDialog(context, ref, d),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined, size: 20),
+                                  tooltip: 'Edit Driver',
+                                  onPressed: () => _showEditDialog(context, ref, d),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.red),
+                                  tooltip: 'Delete Driver',
+                                  onPressed: () => _confirmDelete(context, ref, d),
+                                ),
+                              ],
                             ),
                           ],
                         ),
@@ -338,6 +348,11 @@ class DriverListScreen extends ConsumerWidget {
                                     icon: const Icon(Icons.sync_alt, size: 18),
                                     onPressed: () => _showStatusSheet(context, ref, d),
                                   ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.red),
+                                    tooltip: 'Delete Driver',
+                                    onPressed: () => _confirmDelete(context, ref, d),
+                                  ),
                                 ],
                               ),
                             ),
@@ -351,6 +366,40 @@ class DriverListScreen extends ConsumerWidget {
             SizedBox(height: isMobile ? 80 : 20),
           ],
         ),
+      ),
+    );
+  }
+
+  void _confirmDelete(BuildContext context, WidgetRef ref, Driver d) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Driver'),
+        content: Text('Are you sure you want to delete driver ${d.name}? This action cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              final success = ref.read(driverViewModelProvider.notifier).deleteDriver(d.id);
+              if (!success) {
+                final err = ref.read(driverViewModelProvider).errorMessage ?? 'Cannot delete driver';
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(err), backgroundColor: AppColors.red),
+                );
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Driver ${d.name} deleted successfully'), backgroundColor: AppColors.green),
+                );
+              }
+            },
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }
