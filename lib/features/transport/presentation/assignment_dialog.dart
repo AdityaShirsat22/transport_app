@@ -68,7 +68,6 @@ class _AssignmentProgressDialogState extends State<AssignmentProgressDialog> {
       isScrollControlled: true,
       useSafeArea: true,
       builder: (_) => NotificationPreviewDialog(
-        log: widget.notificationLog,
         transport: widget.transport,
       ),
     );

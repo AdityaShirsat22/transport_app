@@ -3095,6 +3095,17 @@ class $LocalTransportsTable extends LocalTransports
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _partyMobileMeta = const VerificationMeta(
+    'partyMobile',
+  );
+  @override
+  late final GeneratedColumn<String> partyMobile = GeneratedColumn<String>(
+    'party_mobile',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _bookingPartyIdMeta = const VerificationMeta(
     'bookingPartyId',
   );
@@ -3394,6 +3405,7 @@ class $LocalTransportsTable extends LocalTransports
     shipmentType,
     partyId,
     partyName,
+    partyMobile,
     bookingPartyId,
     bookingPartyName,
     shippingLineId,
@@ -3516,6 +3528,15 @@ class $LocalTransportsTable extends LocalTransports
       );
     } else if (isInserting) {
       context.missing(_partyNameMeta);
+    }
+    if (data.containsKey('party_mobile')) {
+      context.handle(
+        _partyMobileMeta,
+        partyMobile.isAcceptableOrUnknown(
+          data['party_mobile']!,
+          _partyMobileMeta,
+        ),
+      );
     }
     if (data.containsKey('booking_party_id')) {
       context.handle(
@@ -3797,6 +3818,10 @@ class $LocalTransportsTable extends LocalTransports
         DriftSqlType.string,
         data['${effectivePrefix}party_name'],
       )!,
+      partyMobile: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}party_mobile'],
+      ),
       bookingPartyId: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}booking_party_id'],
@@ -3920,6 +3945,7 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
   final String shipmentType;
   final String partyId;
   final String partyName;
+  final String? partyMobile;
   final String bookingPartyId;
   final String bookingPartyName;
   final String shippingLineId;
@@ -3956,6 +3982,7 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
     required this.shipmentType,
     required this.partyId,
     required this.partyName,
+    this.partyMobile,
     required this.bookingPartyId,
     required this.bookingPartyName,
     required this.shippingLineId,
@@ -3995,6 +4022,9 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
     map['shipment_type'] = Variable<String>(shipmentType);
     map['party_id'] = Variable<String>(partyId);
     map['party_name'] = Variable<String>(partyName);
+    if (!nullToAbsent || partyMobile != null) {
+      map['party_mobile'] = Variable<String>(partyMobile);
+    }
     map['booking_party_id'] = Variable<String>(bookingPartyId);
     map['booking_party_name'] = Variable<String>(bookingPartyName);
     map['shipping_line_id'] = Variable<String>(shippingLineId);
@@ -4061,6 +4091,9 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
       shipmentType: Value(shipmentType),
       partyId: Value(partyId),
       partyName: Value(partyName),
+      partyMobile: partyMobile == null && nullToAbsent
+          ? const Value.absent()
+          : Value(partyMobile),
       bookingPartyId: Value(bookingPartyId),
       bookingPartyName: Value(bookingPartyName),
       shippingLineId: Value(shippingLineId),
@@ -4131,6 +4164,7 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
       shipmentType: serializer.fromJson<String>(json['shipmentType']),
       partyId: serializer.fromJson<String>(json['partyId']),
       partyName: serializer.fromJson<String>(json['partyName']),
+      partyMobile: serializer.fromJson<String?>(json['partyMobile']),
       bookingPartyId: serializer.fromJson<String>(json['bookingPartyId']),
       bookingPartyName: serializer.fromJson<String>(json['bookingPartyName']),
       shippingLineId: serializer.fromJson<String>(json['shippingLineId']),
@@ -4178,6 +4212,7 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
       'shipmentType': serializer.toJson<String>(shipmentType),
       'partyId': serializer.toJson<String>(partyId),
       'partyName': serializer.toJson<String>(partyName),
+      'partyMobile': serializer.toJson<String?>(partyMobile),
       'bookingPartyId': serializer.toJson<String>(bookingPartyId),
       'bookingPartyName': serializer.toJson<String>(bookingPartyName),
       'shippingLineId': serializer.toJson<String>(shippingLineId),
@@ -4219,6 +4254,7 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
     String? shipmentType,
     String? partyId,
     String? partyName,
+    Value<String?> partyMobile = const Value.absent(),
     String? bookingPartyId,
     String? bookingPartyName,
     String? shippingLineId,
@@ -4255,6 +4291,7 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
     shipmentType: shipmentType ?? this.shipmentType,
     partyId: partyId ?? this.partyId,
     partyName: partyName ?? this.partyName,
+    partyMobile: partyMobile.present ? partyMobile.value : this.partyMobile,
     bookingPartyId: bookingPartyId ?? this.bookingPartyId,
     bookingPartyName: bookingPartyName ?? this.bookingPartyName,
     shippingLineId: shippingLineId ?? this.shippingLineId,
@@ -4317,6 +4354,9 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
           : this.shipmentType,
       partyId: data.partyId.present ? data.partyId.value : this.partyId,
       partyName: data.partyName.present ? data.partyName.value : this.partyName,
+      partyMobile: data.partyMobile.present
+          ? data.partyMobile.value
+          : this.partyMobile,
       bookingPartyId: data.bookingPartyId.present
           ? data.bookingPartyId.value
           : this.bookingPartyId,
@@ -4398,6 +4438,7 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
           ..write('shipmentType: $shipmentType, ')
           ..write('partyId: $partyId, ')
           ..write('partyName: $partyName, ')
+          ..write('partyMobile: $partyMobile, ')
           ..write('bookingPartyId: $bookingPartyId, ')
           ..write('bookingPartyName: $bookingPartyName, ')
           ..write('shippingLineId: $shippingLineId, ')
@@ -4439,6 +4480,7 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
     shipmentType,
     partyId,
     partyName,
+    partyMobile,
     bookingPartyId,
     bookingPartyName,
     shippingLineId,
@@ -4479,6 +4521,7 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
           other.shipmentType == this.shipmentType &&
           other.partyId == this.partyId &&
           other.partyName == this.partyName &&
+          other.partyMobile == this.partyMobile &&
           other.bookingPartyId == this.bookingPartyId &&
           other.bookingPartyName == this.bookingPartyName &&
           other.shippingLineId == this.shippingLineId &&
@@ -4517,6 +4560,7 @@ class LocalTransportsCompanion extends UpdateCompanion<LocalTransport> {
   final Value<String> shipmentType;
   final Value<String> partyId;
   final Value<String> partyName;
+  final Value<String?> partyMobile;
   final Value<String> bookingPartyId;
   final Value<String> bookingPartyName;
   final Value<String> shippingLineId;
@@ -4554,6 +4598,7 @@ class LocalTransportsCompanion extends UpdateCompanion<LocalTransport> {
     this.shipmentType = const Value.absent(),
     this.partyId = const Value.absent(),
     this.partyName = const Value.absent(),
+    this.partyMobile = const Value.absent(),
     this.bookingPartyId = const Value.absent(),
     this.bookingPartyName = const Value.absent(),
     this.shippingLineId = const Value.absent(),
@@ -4592,6 +4637,7 @@ class LocalTransportsCompanion extends UpdateCompanion<LocalTransport> {
     required String shipmentType,
     required String partyId,
     required String partyName,
+    this.partyMobile = const Value.absent(),
     required String bookingPartyId,
     required String bookingPartyName,
     required String shippingLineId,
@@ -4649,6 +4695,7 @@ class LocalTransportsCompanion extends UpdateCompanion<LocalTransport> {
     Expression<String>? shipmentType,
     Expression<String>? partyId,
     Expression<String>? partyName,
+    Expression<String>? partyMobile,
     Expression<String>? bookingPartyId,
     Expression<String>? bookingPartyName,
     Expression<String>? shippingLineId,
@@ -4687,6 +4734,7 @@ class LocalTransportsCompanion extends UpdateCompanion<LocalTransport> {
       if (shipmentType != null) 'shipment_type': shipmentType,
       if (partyId != null) 'party_id': partyId,
       if (partyName != null) 'party_name': partyName,
+      if (partyMobile != null) 'party_mobile': partyMobile,
       if (bookingPartyId != null) 'booking_party_id': bookingPartyId,
       if (bookingPartyName != null) 'booking_party_name': bookingPartyName,
       if (shippingLineId != null) 'shipping_line_id': shippingLineId,
@@ -4729,6 +4777,7 @@ class LocalTransportsCompanion extends UpdateCompanion<LocalTransport> {
     Value<String>? shipmentType,
     Value<String>? partyId,
     Value<String>? partyName,
+    Value<String?>? partyMobile,
     Value<String>? bookingPartyId,
     Value<String>? bookingPartyName,
     Value<String>? shippingLineId,
@@ -4767,6 +4816,7 @@ class LocalTransportsCompanion extends UpdateCompanion<LocalTransport> {
       shipmentType: shipmentType ?? this.shipmentType,
       partyId: partyId ?? this.partyId,
       partyName: partyName ?? this.partyName,
+      partyMobile: partyMobile ?? this.partyMobile,
       bookingPartyId: bookingPartyId ?? this.bookingPartyId,
       bookingPartyName: bookingPartyName ?? this.bookingPartyName,
       shippingLineId: shippingLineId ?? this.shippingLineId,
@@ -4826,6 +4876,9 @@ class LocalTransportsCompanion extends UpdateCompanion<LocalTransport> {
     }
     if (partyName.present) {
       map['party_name'] = Variable<String>(partyName.value);
+    }
+    if (partyMobile.present) {
+      map['party_mobile'] = Variable<String>(partyMobile.value);
     }
     if (bookingPartyId.present) {
       map['booking_party_id'] = Variable<String>(bookingPartyId.value);
@@ -4927,6 +4980,7 @@ class LocalTransportsCompanion extends UpdateCompanion<LocalTransport> {
           ..write('shipmentType: $shipmentType, ')
           ..write('partyId: $partyId, ')
           ..write('partyName: $partyName, ')
+          ..write('partyMobile: $partyMobile, ')
           ..write('bookingPartyId: $bookingPartyId, ')
           ..write('bookingPartyName: $bookingPartyName, ')
           ..write('shippingLineId: $shippingLineId, ')
@@ -10226,6 +10280,7 @@ typedef $$LocalTransportsTableCreateCompanionBuilder =
       required String shipmentType,
       required String partyId,
       required String partyName,
+      Value<String?> partyMobile,
       required String bookingPartyId,
       required String bookingPartyName,
       required String shippingLineId,
@@ -10265,6 +10320,7 @@ typedef $$LocalTransportsTableUpdateCompanionBuilder =
       Value<String> shipmentType,
       Value<String> partyId,
       Value<String> partyName,
+      Value<String?> partyMobile,
       Value<String> bookingPartyId,
       Value<String> bookingPartyName,
       Value<String> shippingLineId,
@@ -10345,6 +10401,11 @@ class $$LocalTransportsTableFilterComposer
 
   ColumnFilters<String> get partyName => $composableBuilder(
     column: $table.partyName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get partyMobile => $composableBuilder(
+    column: $table.partyMobile,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -10533,6 +10594,11 @@ class $$LocalTransportsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get partyMobile => $composableBuilder(
+    column: $table.partyMobile,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get bookingPartyId => $composableBuilder(
     column: $table.bookingPartyId,
     builder: (column) => ColumnOrderings(column),
@@ -10712,6 +10778,11 @@ class $$LocalTransportsTableAnnotationComposer
   GeneratedColumn<String> get partyName =>
       $composableBuilder(column: $table.partyName, builder: (column) => column);
 
+  GeneratedColumn<String> get partyMobile => $composableBuilder(
+    column: $table.partyMobile,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<String> get bookingPartyId => $composableBuilder(
     column: $table.bookingPartyId,
     builder: (column) => column,
@@ -10877,6 +10948,7 @@ class $$LocalTransportsTableTableManager
                 Value<String> shipmentType = const Value.absent(),
                 Value<String> partyId = const Value.absent(),
                 Value<String> partyName = const Value.absent(),
+                Value<String?> partyMobile = const Value.absent(),
                 Value<String> bookingPartyId = const Value.absent(),
                 Value<String> bookingPartyName = const Value.absent(),
                 Value<String> shippingLineId = const Value.absent(),
@@ -10914,6 +10986,7 @@ class $$LocalTransportsTableTableManager
                 shipmentType: shipmentType,
                 partyId: partyId,
                 partyName: partyName,
+                partyMobile: partyMobile,
                 bookingPartyId: bookingPartyId,
                 bookingPartyName: bookingPartyName,
                 shippingLineId: shippingLineId,
@@ -10953,6 +11026,7 @@ class $$LocalTransportsTableTableManager
                 required String shipmentType,
                 required String partyId,
                 required String partyName,
+                Value<String?> partyMobile = const Value.absent(),
                 required String bookingPartyId,
                 required String bookingPartyName,
                 required String shippingLineId,
@@ -10990,6 +11064,7 @@ class $$LocalTransportsTableTableManager
                 shipmentType: shipmentType,
                 partyId: partyId,
                 partyName: partyName,
+                partyMobile: partyMobile,
                 bookingPartyId: bookingPartyId,
                 bookingPartyName: bookingPartyName,
                 shippingLineId: shippingLineId,

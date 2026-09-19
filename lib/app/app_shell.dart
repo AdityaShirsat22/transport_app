@@ -7,11 +7,71 @@ import '../core/sync/sync_engine.dart';
 import '../core/widgets/responsive_layout.dart';
 import 'theme/app_colors.dart';
 import 'theme/app_text_styles.dart';
+import '../features/drivers/data/driver_repository.dart';
+import '../features/drivers/presentation/driver_view_model.dart';
+import '../features/locations/data/location_repository.dart';
+import '../features/locations/presentation/location_view_model.dart';
+import '../features/parties/data/party_repository.dart';
+import '../features/parties/presentation/party_view_model.dart';
+import '../features/ports_cfs/data/port_cfs_repository.dart';
+import '../features/ports_cfs/presentation/port_cfs_view_model.dart';
+import '../features/shipping_lines/data/shipping_line_repository.dart';
+import '../features/shipping_lines/presentation/shipping_line_view_model.dart';
+import '../features/transport/data/transport_repository.dart';
+import '../features/transport/presentation/transport_view_model.dart';
+import '../features/vehicles/data/vehicle_repository.dart';
+import '../features/vehicles/presentation/vehicle_view_model.dart';
 
-class AppShell extends ConsumerWidget {
+class AppShell extends ConsumerStatefulWidget {
   final Widget child;
 
   const AppShell({super.key, required this.child});
+
+  @override
+  ConsumerState<AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends ConsumerState<AppShell> {
+  bool _hasSyncedOnStartup = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Run the startup sync after the first frame so providers are ready.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _runStartupSync());
+  }
+
+  Future<void> _runStartupSync() async {
+    if (_hasSyncedOnStartup) return;
+    final authState = ref.read(authProvider);
+    if (authState.user == null) return; // Not authenticated yet; skip
+
+    _hasSyncedOnStartup = true;
+
+    // Pull all cloud data into local SQLite
+    await ref.read(syncEngineProvider.notifier).startupSync();
+
+    // Reload every repository's in-memory cache from the freshly updated SQLite
+    await ref.read(vehicleRepositoryProvider).reloadFromDatabase();
+    await ref.read(driverRepositoryProvider).reloadFromDatabase();
+    await ref.read(partyRepositoryProvider).reloadFromDatabase();
+    await ref.read(shippingLineRepositoryProvider).reloadFromDatabase();
+    await ref.read(locationRepositoryProvider).reloadFromDatabase();
+    await ref.read(portCfsRepositoryProvider).reloadFromDatabase();
+    await ref.read(transportRepositoryProvider).reloadFromDatabase();
+
+    // Notify every ViewModel so the UI rebuilds with fresh data
+    if (mounted) {
+      ref.read(vehicleViewModelProvider.notifier).loadVehicles();
+      ref.read(driverViewModelProvider.notifier).loadDrivers();
+      ref.read(partyViewModelProvider.notifier).loadParties();
+      ref.read(shippingLineViewModelProvider.notifier).loadItems();
+      ref.read(locationViewModelProvider.notifier).loadLocations();
+      ref.read(portCfsViewModelProvider.notifier).loadItems();
+      ref.read(transportViewModelProvider.notifier).loadTransports();
+    }
+  }
+
 
   int _calculateSelectedIndex(String location) {
     if (location == '/dashboard') return 0;
@@ -53,7 +113,7 @@ class AppShell extends ConsumerWidget {
   }
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  Widget build(BuildContext context) {
     final isMobile = ResponsiveLayout.isMobile(context);
     final location = GoRouterState.of(context).uri.path;
     final selectedIndex = _calculateSelectedIndex(location);
@@ -174,7 +234,7 @@ class AppShell extends ConsumerWidget {
                 backgroundColor: AppColors.primary,
                 child: _SidebarContent(currentPath: location, isMobile: true),
               ),
-        body: child,
+        body: widget.child,
         bottomNavigationBar: isDetailOrChild
             ? null
             : NavigationBar(
@@ -220,7 +280,7 @@ class AppShell extends ConsumerWidget {
             child: _SidebarContent(currentPath: location, isMobile: false),
           ),
           const VerticalDivider(width: 1, thickness: 1, color: AppColors.border),
-          Expanded(child: child),
+          Expanded(child: widget.child),
         ],
       ),
     );
@@ -508,7 +568,7 @@ class _SidebarContent extends ConsumerWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            user?.name ?? 'Aditya Ops Manager',
+                            user?.name ?? AppConstants.defaultUserName,
                             style: AppTextStyles.labelMedium.copyWith(color: Colors.white),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -520,7 +580,7 @@ class _SidebarContent extends ConsumerWidget {
                               borderRadius: BorderRadius.circular(4),
                             ),
                             child: Text(
-                              (user?.role ?? 'Super Admin').toUpperCase(),
+                              (user?.role ?? AppConstants.defaultUserRole).toUpperCase(),
                               style: const TextStyle(
                                 fontSize: 9,
                                 fontWeight: FontWeight.w700,

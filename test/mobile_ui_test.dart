@@ -132,9 +132,10 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('WHATSAPP NOTIFICATION'), findsOneWidget);
-      expect(find.text('SENT'), findsOneWidget);
-      expect(find.text('Close'), findsOneWidget);
+      expect(find.text('WhatsApp'), findsOneWidget);
+      expect(find.text('SEND TO'), findsOneWidget);
+      expect(find.text('Open in WhatsApp'), findsOneWidget);
+      expect(find.text('Copy'), findsOneWidget);
     });
   });
 }

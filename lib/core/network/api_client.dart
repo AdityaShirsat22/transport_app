@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import '../config/env_config.dart';
 
 class ApiClient {
   final Dio dio;
@@ -7,7 +8,7 @@ class ApiClient {
       : dio = client ??
             Dio(
               BaseOptions(
-                baseUrl: 'https://api.freightops-demo.internal/v1',
+                baseUrl: EnvConfig.apiBaseUrl,
                 connectTimeout: const Duration(seconds: 10),
                 receiveTimeout: const Duration(seconds: 10),
                 headers: {

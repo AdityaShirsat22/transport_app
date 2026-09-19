@@ -12,6 +12,7 @@ class LocalTransports extends Table {
   // Foreign keys
   TextColumn get partyId => text()();
   TextColumn get partyName => text()();
+  TextColumn get partyMobile => text().nullable()();
   TextColumn get bookingPartyId => text()();
   TextColumn get bookingPartyName => text()();
   TextColumn get shippingLineId => text()();

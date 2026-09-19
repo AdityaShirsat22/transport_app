@@ -3,7 +3,6 @@ import '../../../core/enums/container_size.dart';
 import '../../../core/enums/shipment_type.dart';
 import '../../../core/enums/transport_status.dart';
 import '../../../core/services/assignment_service.dart';
-import '../../../core/services/notification_service.dart';
 import '../../../core/utils/id_generator.dart';
 import '../data/transport_repository.dart';
 import '../domain/activity_log.dart';
@@ -125,13 +124,17 @@ class BookingCreationOutcome {
 class TransportViewModel extends StateNotifier<TransportState> {
   final TransportRepository _repo;
   final AssignmentService _assignmentService;
-  final NotificationService _notificationService;
+
   TransportViewModel(
     this._repo,
     this._assignmentService,
-    this._notificationService,
   ) : super(const TransportState()) {
     state = state.copyWith(transports: _repo.getAll());
+    if (_repo is ProductionTransportRepository) {
+      _repo.initialized.then((_) {
+        if (mounted) loadTransports();
+      });
+    }
   }
 
   void loadTransports() {
@@ -195,6 +198,7 @@ class TransportViewModel extends StateNotifier<TransportState> {
       shipmentType: shipmentType,
       partyId: partyId,
       partyName: partyName,
+      partyMobile: partyMobile,
       bookingPartyId: bookingPartyId,
       bookingPartyName: bookingPartyName,
       shippingLineId: shippingLineId,
@@ -326,6 +330,12 @@ class TransportViewModel extends StateNotifier<TransportState> {
     loadTransports();
   }
 
+  /// Delete POD
+  void deletePod(String transportId) {
+    _repo.deletePod(transportId);
+    loadTransports();
+  }
+
   /// Complete transport & release resources
   void completeTransport(String transportId) {
     final current = _repo.getById(transportId);
@@ -423,6 +433,35 @@ class TransportViewModel extends StateNotifier<TransportState> {
     }
   }
 
+  /// Update container number and seal number after booking
+  void updateContainerAndSeal({
+    required String transportId,
+    required String containerNumber,
+    required String sealNumber,
+  }) {
+    final current = _repo.getById(transportId);
+    if (current == null) return;
+
+    final updated = current.copyWith(
+      containerNumber: containerNumber.trim().toUpperCase(),
+      sealNumber: sealNumber.trim().toUpperCase(),
+    );
+    _repo.update(updated);
+
+    _repo.addActivityLog(
+      ActivityLog(
+        id: 'act-${DateTime.now().millisecondsSinceEpoch}',
+        transportId: transportId,
+        title: 'Container Details Updated',
+        description:
+            'Container No: ${containerNumber.trim().toUpperCase().isNotEmpty ? containerNumber.trim().toUpperCase() : "—"}  •  Seal No: ${sealNumber.trim().toUpperCase().isNotEmpty ? sealNumber.trim().toUpperCase() : "—"}',
+        timestamp: DateTime.now(),
+      ),
+    );
+
+    loadTransports();
+  }
+
   /// Delete a transport operation
   void deleteTransport(String id) {
     final current = _repo.getById(id);
@@ -443,10 +482,8 @@ final transportViewModelProvider =
     StateNotifierProvider<TransportViewModel, TransportState>((ref) {
   final repo = ref.watch(transportRepositoryProvider);
   final assignmentService = ref.watch(assignmentServiceProvider);
-  final notificationService = ref.watch(notificationServiceProvider);
   return TransportViewModel(
     repo,
     assignmentService,
-    notificationService,
   );
 });

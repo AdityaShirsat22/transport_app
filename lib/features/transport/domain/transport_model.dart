@@ -14,6 +14,7 @@ class Transport {
   // Foreign keys
   final String partyId;
   final String partyName;
+  final String? partyMobile;
   final String bookingPartyId;
   final String bookingPartyName;
   final String shippingLineId;
@@ -54,6 +55,7 @@ class Transport {
     required this.shipmentType,
     required this.partyId,
     required this.partyName,
+    this.partyMobile,
     required this.bookingPartyId,
     required this.bookingPartyName,
     required this.shippingLineId,
@@ -90,6 +92,7 @@ class Transport {
     ShipmentType? shipmentType,
     String? partyId,
     String? partyName,
+    String? partyMobile,
     String? bookingPartyId,
     String? bookingPartyName,
     String? shippingLineId,
@@ -114,6 +117,7 @@ class Transport {
     bool clearVehicle = false,
     bool clearDriver = false,
     bool clearException = false,
+    bool clearPod = false,
   }) {
     return Transport(
       id: id ?? this.id,
@@ -124,6 +128,7 @@ class Transport {
       shipmentType: shipmentType ?? this.shipmentType,
       partyId: partyId ?? this.partyId,
       partyName: partyName ?? this.partyName,
+      partyMobile: partyMobile ?? this.partyMobile,
       bookingPartyId: bookingPartyId ?? this.bookingPartyId,
       bookingPartyName: bookingPartyName ?? this.bookingPartyName,
       shippingLineId: shippingLineId ?? this.shippingLineId,
@@ -143,7 +148,7 @@ class Transport {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       completionDate: completionDate ?? this.completionDate,
-      pod: pod ?? this.pod,
+      pod: clearPod ? null : (pod ?? this.pod),
       exceptionReason: clearException ? null : (exceptionReason ?? this.exceptionReason),
     );
   }
@@ -158,6 +163,7 @@ class Transport {
       'shipmentType': shipmentType.code,
       'partyId': partyId,
       'partyName': partyName,
+      'partyMobile': partyMobile,
       'bookingPartyId': bookingPartyId,
       'bookingPartyName': bookingPartyName,
       'shippingLineId': shippingLineId,
@@ -192,6 +198,7 @@ class Transport {
       shipmentType: ShipmentType.fromCode(json['shipmentType'] as String),
       partyId: json['partyId'] as String,
       partyName: json['partyName'] as String,
+      partyMobile: json['partyMobile'] as String?,
       bookingPartyId: json['bookingPartyId'] as String,
       bookingPartyName: json['bookingPartyName'] as String,
       shippingLineId: json['shippingLineId'] as String,

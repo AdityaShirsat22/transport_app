@@ -93,6 +93,37 @@ class PodService {
 
     return pod;
   }
+
+  /// Delete POD document from local storage, Supabase storage, and repository
+  Future<void> deletePod(String transportId) async {
+    final transport = _transportRepo.getById(transportId);
+    final fileName = transport?.pod?.fileName;
+
+    // 1. Delete local cached file
+    if (fileName != null) {
+      try {
+        final docsDir = await getApplicationDocumentsDirectory();
+        final podFile = File(p.join(docsDir.path, 'pods', transportId, fileName));
+        if (await podFile.exists()) {
+          await podFile.delete();
+        }
+      } catch (_) {}
+    }
+
+    // 2. Delete from Supabase Storage if configured and online
+    final client = _client;
+    if (client != null && fileName != null) {
+      try {
+        final storagePath = 'pods/$transportId/$fileName';
+        await client.storage.from('pod-documents').remove([storagePath]);
+      } catch (_) {
+        // Safe fallback
+      }
+    }
+
+    // 3. Remove from repository, Drift DB, and enqueue sync mutation
+    _transportRepo.deletePod(transportId);
+  }
 }
 
 final podServiceProvider = Provider<PodService>((ref) {

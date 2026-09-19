@@ -4,7 +4,6 @@ import 'package:go_router/go_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../core/auth/auth_provider.dart';
-import '../../../core/config/env_config.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_text_field.dart';
@@ -18,8 +17,8 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _emailCtrl = TextEditingController(text: EnvConfig.defaultAdminEmail);
-  final _passwordCtrl = TextEditingController(text: 'admin123');
+  final _emailCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
   bool _obscurePassword = true;
 
   @override
@@ -194,15 +193,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     icon: Icons.login,
                     isLoading: authState.isLoading,
                     onPressed: _handleLogin,
-                  ),
-                  const SizedBox(height: 16),
-
-                  // Quick test autofill hint
-                  Center(
-                    child: Text(
-                      'Default Admin: ${EnvConfig.defaultAdminEmail} / admin123',
-                      style: const TextStyle(color: Color(0xFF64748B), fontSize: 11),
-                    ),
                   ),
                 ],
               ),

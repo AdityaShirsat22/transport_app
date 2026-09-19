@@ -20,6 +20,7 @@ abstract class TransportRepository {
   void update(Transport transport);
   void updateStatus(String transportId, TransportStatus newStatus, {String? exceptionReason, String? remarks, String changedBy = 'Super Admin'});
   void uploadPod(String transportId, PodDocument pod);
+  void deletePod(String transportId);
   void completeTransport(String transportId);
   void delete(String id);
 
@@ -96,6 +97,7 @@ class ProductionTransportRepository implements TransportRepository {
               shipmentType: ShipmentType.fromCode(row.shipmentType),
               partyId: row.partyId,
               partyName: row.partyName,
+              partyMobile: row.partyMobile,
               bookingPartyId: row.bookingPartyId,
               bookingPartyName: row.bookingPartyName,
               shippingLineId: row.shippingLineId,
@@ -304,6 +306,44 @@ class ProductionTransportRepository implements TransportRepository {
   }
 
   @override
+  void deletePod(String transportId) {
+    final index = _transports.indexWhere((t) => t.id == transportId);
+    if (index != -1) {
+      final current = _transports[index];
+      final currentPodName = current.pod?.fileName ?? 'POD Document';
+      final now = DateTime.now();
+
+      // If status is podReceived, revert back to containerDelivered
+      final newStatus = current.status == TransportStatus.podReceived
+          ? TransportStatus.containerDelivered
+          : current.status;
+
+      final updated = current.copyWith(
+        clearPod: true,
+        status: newStatus,
+        updatedAt: now,
+      );
+      _transports[index] = updated;
+      _persistTransportToDb(updated);
+      _enqueueSyncTransport(updated, 'UPDATE');
+
+      _deletePodFromDb(transportId);
+
+      _recordStatusHistory(transportId, newStatus.code, 'POD removed ($currentPodName)', 'Super Admin');
+
+      addActivityLog(
+        ActivityLog(
+          id: 'act-${DateTime.now().millisecondsSinceEpoch}',
+          transportId: transportId,
+          title: 'POD Deleted',
+          description: 'Proof of Delivery ($currentPodName) was deleted. Status set to ${newStatus.label}.',
+          timestamp: now,
+        ),
+      );
+    }
+  }
+
+  @override
   void completeTransport(String transportId) {
     final index = _transports.indexWhere((t) => t.id == transportId);
     if (index != -1) {
@@ -435,8 +475,6 @@ class ProductionTransportRepository implements TransportRepository {
           'transport_id': transportId,
           'vehicle_id': vehicleId,
           'assigned_at': now.toIso8601String(),
-          'assigned_by': assignedBy,
-          'is_active': true,
         }),
       );
     } catch (_) {
@@ -495,8 +533,6 @@ class ProductionTransportRepository implements TransportRepository {
           'transport_id': transportId,
           'driver_id': driverId,
           'assigned_at': now.toIso8601String(),
-          'assigned_by': assignedBy,
-          'is_active': true,
         }),
       );
     } catch (_) {
@@ -537,6 +573,7 @@ class ProductionTransportRepository implements TransportRepository {
               shipmentType: Value(t.shipmentType.code),
               partyId: Value(t.partyId),
               partyName: Value(t.partyName),
+              partyMobile: Value(t.partyMobile),
               bookingPartyId: Value(t.bookingPartyId),
               bookingPartyName: Value(t.bookingPartyName),
               shippingLineId: Value(t.shippingLineId),
@@ -560,7 +597,42 @@ class ProductionTransportRepository implements TransportRepository {
             ),
           );
     } catch (_) {
-      // Safe fallback
+      try {
+        // Fallback without partyMobile in case legacy device DB hasn't migrated yet
+        await _db.into(_db.localTransports).insertOnConflictUpdate(
+              LocalTransportsCompanion(
+                id: Value(t.id),
+                transportNumber: Value(t.id),
+                bookingNumber: Value(t.bookingNumber),
+                containerNumber: Value(t.containerNumber),
+                sealNumber: Value(t.sealNumber),
+                containerSize: Value(t.containerSize.code),
+                shipmentType: Value(t.shipmentType.code),
+                partyId: Value(t.partyId),
+                partyName: Value(t.partyName),
+                bookingPartyId: Value(t.bookingPartyId),
+                bookingPartyName: Value(t.bookingPartyName),
+                shippingLineId: Value(t.shippingLineId),
+                shippingLineName: Value(t.shippingLineName),
+                fromLocationId: Value(t.fromLocationId),
+                fromLocationName: Value(t.fromLocationName),
+                toLocationId: Value(t.toLocationId),
+                toLocationName: Value(t.toLocationName),
+                portCfsId: Value(t.portCfsId),
+                portCfsName: Value(t.portCfsName),
+                vehicleId: Value(t.vehicleId),
+                vehicleNumber: Value(t.vehicleNumber),
+                driverId: Value(t.driverId),
+                driverName: Value(t.driverName),
+                driverMobile: Value(t.driverMobile),
+                status: Value(t.status.code),
+                exceptionReason: Value(t.exceptionReason),
+                completedAt: Value(t.completionDate),
+                createdAt: Value(t.createdAt),
+                updatedAt: Value(DateTime.now()),
+              ),
+            );
+      } catch (_) {}
     }
   }
 
@@ -628,10 +700,11 @@ class ProductionTransportRepository implements TransportRepository {
         payload: jsonEncode({
           'id': id,
           'transport_id': transportId,
-          'status': status,
-          'remarks': remarks,
+          'from_status': null,
+          'to_status': status,
+          'reason': remarks,
           'changed_by': changedBy,
-          'created_at': now.toIso8601String(),
+          'changed_at': now.toIso8601String(),
         }),
       );
     } catch (_) {
@@ -668,9 +741,25 @@ class ProductionTransportRepository implements TransportRepository {
           'storage_path': 'pods/$transportId/${pod.fileName}',
           'file_type': pod.fileType,
           'file_size': pod.fileSize,
-          'uploaded_by': pod.uploadedBy,
           'uploaded_at': pod.uploadedAt.toIso8601String(),
-          'file_url': pod.fileUrl,
+        }),
+      );
+    } catch (_) {
+      // Safe fallback
+    }
+  }
+
+  Future<void> _deletePodFromDb(String transportId) async {
+    try {
+      await (_db.delete(_db.localPodDocuments)..where((tbl) => tbl.transportId.equals(transportId))).go();
+
+      _db.enqueueSync(
+        id: 'sync-del-pod-${DateTime.now().millisecondsSinceEpoch}',
+        entityType: 'pod_document',
+        entityId: transportId,
+        operation: 'DELETE',
+        payload: jsonEncode({
+          'transport_id': transportId,
         }),
       );
     } catch (_) {
@@ -704,10 +793,9 @@ class ProductionTransportRepository implements TransportRepository {
       payload: jsonEncode({
         'id': a.id,
         'transport_id': a.transportId,
-        'user_id': a.performedBy,
-        'action': a.title,
+        'title': a.title,
         'description': a.description,
-        'created_at': a.timestamp.toIso8601String(),
+        'timestamp': a.timestamp.toIso8601String(),
       }),
     );
   }
@@ -740,10 +828,9 @@ class ProductionTransportRepository implements TransportRepository {
       payload: jsonEncode({
         'id': n.id,
         'transport_id': n.transportId,
-        'recipient_name': n.recipientName,
-        'recipient_mobile': n.recipientMobile,
         'channel': n.channel,
-        'message_body': n.messageBody,
+        'recipient_phone': n.recipientMobile,
+        'message': n.messageBody,
         'status': n.status,
         'sent_at': n.sentAt.toIso8601String(),
       }),

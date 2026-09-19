@@ -45,7 +45,25 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 1;
+  int get schemaVersion => 2;
+
+  @override
+  MigrationStrategy get migration => MigrationStrategy(
+        onCreate: (Migrator m) async {
+          await m.createAll();
+        },
+        onUpgrade: (Migrator m, int from, int to) async {
+          await m.createAll();
+        },
+        beforeOpen: (details) async {
+          await customStatement('PRAGMA foreign_keys = OFF;');
+          try {
+            await customStatement('ALTER TABLE local_transports ADD COLUMN party_mobile TEXT;');
+          } catch (_) {
+            // Column already exists or table not yet created
+          }
+        },
+      );
 
   static LazyDatabase _openConnection() {
     return LazyDatabase(() async {

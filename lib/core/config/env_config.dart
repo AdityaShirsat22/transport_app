@@ -14,6 +14,23 @@ class EnvConfig {
   static bool get isSupabaseConfigured =>
       supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 
-  /// Default demo admin email for quick access
-  static const String defaultAdminEmail = 'admin@freightops.com';
+  /// Default admin email
+  static const String adminEmail = 'admin@freightops.com';
+
+  /// Operational office contacts for communication fallbacks
+  static const String officePhone = String.fromEnvironment(
+    'OFFICE_PHONE',
+    defaultValue: '917769964872',
+  );
+
+  static const String officeEmail = String.fromEnvironment(
+    'OFFICE_EMAIL',
+    defaultValue: 'adityashirsat1170@gmail.com',
+  );
+
+  /// REST API Base URL
+  static const String apiBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: 'https://api.freightops.com/v1',
+  );
 }

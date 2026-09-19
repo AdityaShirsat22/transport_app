@@ -48,7 +48,7 @@ Thank you.''';
       id: 'notif-${DateTime.now().millisecondsSinceEpoch}',
       transportId: transport.id,
       recipientName: transport.partyName,
-      recipientMobile: recipientPhone.isNotEmpty ? recipientPhone : '9822001122',
+      recipientMobile: recipientPhone.isNotEmpty ? recipientPhone : (transport.partyMobile ?? ''),
       channel: channel,
       messageBody: message,
       status: 'NOT_CONFIGURED',

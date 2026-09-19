@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config/env_config.dart';
+import '../constants/app_constants.dart';
 
 class AppUser {
   final String id;
@@ -56,9 +57,9 @@ class AuthService {
       if (user != null) {
         final appUser = AppUser(
           id: user.id,
-          email: user.email ?? EnvConfig.defaultAdminEmail,
-          name: (user.userMetadata?['name'] as String?) ?? 'Operations Admin',
-          role: (user.userMetadata?['role'] as String?) ?? 'Super Admin',
+          email: user.email ?? EnvConfig.adminEmail,
+          name: (user.userMetadata?['name'] as String?) ?? AppConstants.defaultUserName,
+          role: (user.userMetadata?['role'] as String?) ?? AppConstants.defaultUserRole,
         );
         await _saveLocalSession(appUser);
         return appUser;
@@ -100,8 +101,8 @@ class AuthService {
         final appUser = AppUser(
           id: user.id,
           email: user.email ?? email,
-          name: (user.userMetadata?['name'] as String?) ?? 'Aditya Ops Manager',
-          role: (user.userMetadata?['role'] as String?) ?? 'Super Admin',
+          name: (user.userMetadata?['name'] as String?) ?? AppConstants.defaultUserName,
+          role: (user.userMetadata?['role'] as String?) ?? AppConstants.defaultUserRole,
         );
 
         await _saveLocalSession(appUser);
@@ -112,13 +113,13 @@ class AuthService {
       }
     } else {
       // Local/Offline standalone mode validation
-      if (email.trim().toLowerCase() == EnvConfig.defaultAdminEmail.toLowerCase() &&
+      if (email.trim().toLowerCase() == EnvConfig.adminEmail.toLowerCase() &&
           password.length >= 6) {
         final appUser = AppUser(
           id: 'user-admin-local-1',
           email: email.trim(),
-          name: 'Aditya Ops Manager',
-          role: 'Super Admin',
+          name: AppConstants.defaultUserName,
+          role: AppConstants.defaultUserRole,
         );
         await _saveLocalSession(appUser);
         return appUser;

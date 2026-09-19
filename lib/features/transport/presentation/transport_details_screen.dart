@@ -12,6 +12,7 @@ import '../../../core/widgets/app_card.dart';
 import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/responsive_layout.dart';
 import '../../../core/widgets/status_badge.dart';
+import '../domain/activity_log.dart';
 import '../domain/transport_model.dart';
 import 'notification_preview_dialog.dart';
 import 'reassign_dialog.dart';
@@ -234,6 +235,117 @@ class TransportDetailsScreen extends ConsumerWidget {
     );
   }
 
+  void _showEditContainerSealSheet(BuildContext context, WidgetRef ref, Transport transport) {
+    final containerCtrl = TextEditingController(text: transport.containerNumber);
+    final sealCtrl = TextEditingController(text: transport.sealNumber);
+    final formKey = GlobalKey<FormState>();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetCtx) => Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 16,
+          bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 24,
+        ),
+        child: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Edit Container & Seal Details',
+                      style: AppTextStyles.headingSmall,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPressed: () => Navigator.of(sheetCtx).pop(),
+                  ),
+                ],
+              ),
+              const Divider(height: 16),
+              Text(
+                'Update container number and seal number for booking ${transport.bookingNumber}.',
+                style: AppTextStyles.bodySmall,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: containerCtrl,
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(
+                  labelText: 'Container Number',
+                  hintText: 'e.g. MSCU1234567',
+                  prefixIcon: Icon(Icons.inventory_2_outlined, size: 18),
+                ),
+                validator: (val) {
+                  if (val != null && val.trim().isNotEmpty && val.trim().length < 4) {
+                    return 'Container number must be at least 4 characters';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 14),
+              TextFormField(
+                controller: sealCtrl,
+                textCapitalization: TextCapitalization.characters,
+                decoration: const InputDecoration(
+                  labelText: 'Custom Seal Number',
+                  hintText: 'e.g. SL-98234',
+                  prefixIcon: Icon(Icons.lock_outline, size: 18),
+                ),
+              ),
+              const SizedBox(height: 24),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(sheetCtx).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      icon: const Icon(Icons.save_outlined, size: 18),
+                      label: const Text('Save Changes'),
+                      onPressed: () {
+                        if (!formKey.currentState!.validate()) return;
+                        Navigator.of(sheetCtx).pop();
+                        ref.read(transportViewModelProvider.notifier).updateContainerAndSeal(
+                              transportId: transport.id,
+                              containerNumber: containerCtrl.text,
+                              sealNumber: sealCtrl.text,
+                            );
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('Container & seal details updated successfully!'),
+                              backgroundColor: AppColors.green,
+                            ),
+                          );
+                        }
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showCompleteSheet(BuildContext context, WidgetRef ref, Transport transport) {
     showModalBottomSheet(
       context: context,
@@ -407,6 +519,142 @@ class TransportDetailsScreen extends ConsumerWidget {
     );
   }
 
+  int _resolveLastSequentialIndex(Transport transport, List<ActivityLog> activityLogs) {
+    final stages = TransportStatus.sequence;
+    if (transport.status.isSequentialStep) {
+      return stages.indexOf(transport.status);
+    }
+    for (final log in activityLogs) {
+      for (int idx = stages.length - 1; idx >= 0; idx--) {
+        final stage = stages[idx];
+        if (log.title.contains(stage.label) ||
+            (stage == TransportStatus.bookingCreated && log.title.contains('Booking Created')) ||
+            (stage == TransportStatus.vehicleAssigned && log.title.contains('Vehicle Assigned')) ||
+            (stage == TransportStatus.driverAssigned && log.title.contains('Driver Assigned')) ||
+            (stage == TransportStatus.podReceived && log.title.contains('POD Uploaded')) ||
+            (stage == TransportStatus.completed && log.title.contains('Transport Completed'))) {
+          return idx;
+        }
+      }
+    }
+    return transport.isAssigned ? 2 : 0;
+  }
+
+  DateTime? _getStageTimestamp(TransportStatus stage, Transport transport, List<ActivityLog> logs) {
+    if (stage == TransportStatus.bookingCreated) {
+      return transport.createdAt;
+    }
+    if (stage == TransportStatus.completed && transport.completionDate != null) {
+      return transport.completionDate;
+    }
+    if (stage == TransportStatus.podReceived && transport.pod != null) {
+      return transport.pod!.uploadedAt;
+    }
+    for (final log in logs) {
+      if (log.title.contains(stage.label) ||
+          (stage == TransportStatus.bookingCreated && log.title.contains('Booking Created')) ||
+          (stage == TransportStatus.vehicleAssigned && log.title.contains('Vehicle Assigned')) ||
+          (stage == TransportStatus.driverAssigned && log.title.contains('Driver Assigned')) ||
+          (stage == TransportStatus.podReceived && log.title.contains('POD Uploaded')) ||
+          (stage == TransportStatus.completed && log.title.contains('Transport Completed'))) {
+        return log.timestamp;
+      }
+    }
+    return null;
+  }
+
+  void _showResumeTripSheet(BuildContext context, WidgetRef ref, Transport transport, int lastSequentialIndex) {
+    final stages = TransportStatus.sequence;
+    TransportStatus resumeTarget = (lastSequentialIndex >= 0 && lastSequentialIndex < stages.length - 1)
+        ? stages[lastSequentialIndex]
+        : TransportStatus.inTransit;
+
+    final notesCtrl = TextEditingController(text: 'Incident resolved. Resuming transport workflow.');
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (sheetInnerCtx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 20,
+            right: 20,
+            top: 16,
+            bottom: MediaQuery.of(sheetInnerCtx).viewInsets.bottom + 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text('Resolve Incident & Resume Trip', style: AppTextStyles.headingSmall, overflow: TextOverflow.ellipsis),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, size: 20),
+                    onPressed: () => Navigator.of(sheetCtx).pop(),
+                  ),
+                ],
+              ),
+              const Divider(height: 16),
+              const SizedBox(height: 6),
+              Text('Current Incident: ${transport.status.label}', style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.red)),
+              if (transport.exceptionReason != null && transport.exceptionReason!.isNotEmpty) ...[
+                const SizedBox(height: 4),
+                Text('Reason: ${transport.exceptionReason}', style: AppTextStyles.bodySmall),
+              ],
+              const SizedBox(height: 14),
+              DropdownButtonFormField<TransportStatus>(
+                initialValue: resumeTarget,
+                isExpanded: true,
+                decoration: const InputDecoration(labelText: 'Resume Transport at Milestone'),
+                items: stages.map((s) => DropdownMenuItem(value: s, child: Text(s.label))).toList(),
+                onChanged: (val) {
+                  if (val != null) setSheetState(() => resumeTarget = val);
+                },
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: notesCtrl,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Resolution Notes',
+                  hintText: 'e.g. Breakdown repaired, delay cleared, customs documents verified',
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  icon: const Icon(Icons.play_arrow_rounded),
+                  label: const Text('Confirm Resolution & Resume Trip'),
+                  style: ElevatedButton.styleFrom(backgroundColor: AppColors.green),
+                  onPressed: () {
+                    Navigator.of(sheetCtx).pop();
+                    ref.read(transportViewModelProvider.notifier).updateStatus(
+                          transport.id,
+                          resumeTarget,
+                          exceptionReason: notesCtrl.text.trim(),
+                        );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Workflow resumed at ${resumeTarget.label}'),
+                        backgroundColor: AppColors.green,
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showNotificationPreview(BuildContext context, Transport transport) {
     showModalBottomSheet(
       context: context,
@@ -450,6 +698,8 @@ class TransportDetailsScreen extends ConsumerWidget {
     final activityLogs = ref.watch(transportViewModelProvider.notifier).getActivityLogs(transport.id);
     final isMobile = ResponsiveLayout.isMobile(context);
 
+    final lastSequentialIndex = _resolveLastSequentialIndex(transport, activityLogs);
+
     // Primary Next Action Button
     Widget? bottomActionButton;
     if (transport.canBeCompleted) {
@@ -463,6 +713,12 @@ class TransportDetailsScreen extends ConsumerWidget {
         text: 'UPLOAD PROOF OF DELIVERY (POD)',
         icon: Icons.upload_file,
         onPressed: () => _showUploadPodSheet(context, ref, transport),
+      );
+    } else if (transport.status.isException && !transport.status.isCancelled) {
+      bottomActionButton = AppButton(
+        text: 'RESOLVE INCIDENT & RESUME TRIP',
+        icon: Icons.play_arrow_rounded,
+        onPressed: () => _showResumeTripSheet(context, ref, transport, lastSequentialIndex),
       );
     } else if (transport.status.nextStatus != null && transport.status.isActive) {
       bottomActionButton = AppButton(
@@ -499,6 +755,7 @@ class TransportDetailsScreen extends ConsumerWidget {
               if (val == 'reassign') _showReassignSheet(context, transport);
               if (val == 'pod') _showUploadPodSheet(context, ref, transport);
               if (val == 'exception') _showExceptionSheet(context, ref, transport);
+              if (val == 'resolve') _showResumeTripSheet(context, ref, transport, lastSequentialIndex);
               if (val == 'delete') _confirmDeleteTransport(context, ref, transport);
             },
             itemBuilder: (ctx) => [
@@ -506,9 +763,9 @@ class TransportDetailsScreen extends ConsumerWidget {
                 value: 'whatsapp',
                 child: Row(
                   children: [
-                    Icon(Icons.chat, size: 18, color: AppColors.green),
+                    Icon(Icons.chat_rounded, size: 18, color: Color(0xFF25D366)),
                     SizedBox(width: 10),
-                    Text('WhatsApp Dispatch Preview'),
+                    Text('WhatsApp'),
                   ],
                 ),
               ),
@@ -535,16 +792,28 @@ class TransportDetailsScreen extends ConsumerWidget {
                     ),
                   ),
                 const PopupMenuDivider(),
-                const PopupMenuItem(
-                  value: 'exception',
-                  child: Row(
-                    children: [
-                      Icon(Icons.warning_amber_rounded, size: 18, color: AppColors.red),
-                      SizedBox(width: 10),
-                      Text('Report Incident / Exception'),
-                    ],
+                if (transport.status.isException && !transport.status.isCancelled)
+                  const PopupMenuItem(
+                    value: 'resolve',
+                    child: Row(
+                      children: [
+                        Icon(Icons.play_circle_outline, size: 18, color: AppColors.green),
+                        SizedBox(width: 10),
+                        Text('Resolve & Resume Trip'),
+                      ],
+                    ),
+                  )
+                else
+                  const PopupMenuItem(
+                    value: 'exception',
+                    child: Row(
+                      children: [
+                        Icon(Icons.warning_amber_rounded, size: 18, color: AppColors.red),
+                        SizedBox(width: 10),
+                        Text('Report Incident / Exception'),
+                      ],
+                    ),
                   ),
-                ),
               ],
               const PopupMenuDivider(),
               const PopupMenuItem(
@@ -633,6 +902,18 @@ class TransportDetailsScreen extends ConsumerWidget {
                               style: const TextStyle(color: AppColors.red, fontSize: 12, fontWeight: FontWeight.bold),
                             ),
                           ),
+                          if (!transport.status.isCancelled) ...[
+                            const SizedBox(width: 8),
+                            TextButton.icon(
+                              style: TextButton.styleFrom(
+                                foregroundColor: AppColors.red,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              icon: const Icon(Icons.play_circle_outline, size: 16),
+                              label: const Text('Resolve', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                              onPressed: () => _showResumeTripSheet(context, ref, transport, lastSequentialIndex),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -652,7 +933,7 @@ class TransportDetailsScreen extends ConsumerWidget {
                   const SizedBox(height: 2),
                   Text('Sequential progression across logistics checkpoints', style: AppTextStyles.bodySmall),
                   const Divider(height: 20),
-                  _buildTimeline(context, transport),
+                  _buildTimeline(context, transport, activityLogs),
                 ],
               ),
             ),
@@ -664,7 +945,18 @@ class TransportDetailsScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Container & Route', style: AppTextStyles.headingSmall),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('Container & Route', style: AppTextStyles.headingSmall),
+                      IconButton(
+                        tooltip: 'Edit Container & Seal',
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        visualDensity: VisualDensity.compact,
+                        onPressed: () => _showEditContainerSealSheet(context, ref, transport),
+                      ),
+                    ],
+                  ),
                   const Divider(height: 16),
                   _buildDetailRow('Container Number', transport.containerNumber.isNotEmpty ? transport.containerNumber : '— (Pending)'),
                   _buildDetailRow('Size & Type', '${transport.containerSize.label} • ${transport.shipmentType.label}'),
@@ -801,7 +1093,11 @@ class TransportDetailsScreen extends ConsumerWidget {
                       ),
                       child: Row(
                         children: [
-                          const Icon(Icons.task_alt, color: AppColors.green, size: 24),
+                          Icon(
+                            transport.pod!.fileType == 'PDF' ? Icons.picture_as_pdf : Icons.image,
+                            color: AppColors.green,
+                            size: 26,
+                          ),
                           const SizedBox(width: 12),
                           Expanded(
                             child: Column(
@@ -815,10 +1111,23 @@ class TransportDetailsScreen extends ConsumerWidget {
                                 Text(
                                   'File: ${transport.pod!.fileName}',
                                   style: const TextStyle(fontSize: 11, color: AppColors.primary),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Attached: ${DateFormatter.formatDateTime(transport.pod!.uploadedAt)}',
+                                  style: TextStyle(fontSize: 10, color: AppColors.textMuted),
                                 ),
                               ],
                             ),
                           ),
+                          if (transport.status.isActive) ...[
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: AppColors.red, size: 22),
+                              tooltip: 'Delete POD',
+                              onPressed: () => _confirmDeletePod(context, ref, transport),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -906,34 +1215,38 @@ class TransportDetailsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildTimeline(BuildContext context, Transport transport) {
-    final stages = [
-      TransportStatus.bookingCreated,
-      TransportStatus.vehicleAssigned,
-      TransportStatus.driverAssigned,
-      TransportStatus.vehicleReported,
-      TransportStatus.containerPickedUp,
-      TransportStatus.inTransit,
-      TransportStatus.atPortCfs,
-      TransportStatus.containerDelivered,
-      TransportStatus.podReceived,
-      TransportStatus.completed,
-    ];
-
-    final currentIndex = stages.indexOf(transport.status);
+  Widget _buildTimeline(BuildContext context, Transport transport, List<ActivityLog> activityLogs) {
+    final stages = TransportStatus.sequence;
+    final lastSequentialIndex = _resolveLastSequentialIndex(transport, activityLogs);
+    final isCompleted = transport.status == TransportStatus.completed;
+    final isException = transport.status.isException;
 
     return Column(
       children: stages.asMap().entries.map((entry) {
         final i = entry.key;
         final stage = entry.value;
-        final isPassed = currentIndex >= 0 && i < currentIndex;
-        final isCurrent = currentIndex == i;
+
+        final bool isPassed;
+        final bool isCurrent;
+
+        if (isCompleted) {
+          isPassed = true;
+          isCurrent = false;
+        } else if (isException) {
+          isPassed = i < lastSequentialIndex;
+          isCurrent = i == lastSequentialIndex;
+        } else {
+          isPassed = lastSequentialIndex >= 0 && i < lastSequentialIndex;
+          isCurrent = lastSequentialIndex == i;
+        }
+
+        final timestamp = _getStageTimestamp(stage, transport, activityLogs);
 
         Color dotColor;
-        if (isPassed) {
+        if (isPassed || (isCompleted && i == stages.length - 1)) {
           dotColor = AppColors.green;
         } else if (isCurrent) {
-          dotColor = transport.status.isException ? AppColors.red : AppColors.accent;
+          dotColor = isException ? AppColors.red : AppColors.accent;
         } else {
           dotColor = AppColors.border;
         }
@@ -947,26 +1260,30 @@ class TransportDetailsScreen extends ConsumerWidget {
                   width: 22,
                   height: 22,
                   decoration: BoxDecoration(
-                    color: isPassed ? AppColors.green : (isCurrent ? dotColor.withValues(alpha: 0.15) : Colors.transparent),
+                    color: (isPassed || (isCompleted && i == stages.length - 1))
+                        ? AppColors.green
+                        : (isCurrent ? dotColor.withValues(alpha: 0.15) : Colors.transparent),
                     shape: BoxShape.circle,
                     border: Border.all(color: dotColor, width: 2),
                   ),
-                  child: isPassed
+                  child: (isPassed || (isCompleted && i == stages.length - 1))
                       ? const Icon(Icons.check, size: 12, color: Colors.white)
                       : (isCurrent
                           ? Center(
-                              child: Container(
-                                width: 8,
-                                height: 8,
-                                decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
-                              ),
+                              child: isException
+                                  ? const Icon(Icons.priority_high, size: 12, color: AppColors.red)
+                                  : Container(
+                                      width: 8,
+                                      height: 8,
+                                      decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+                                    ),
                             )
                           : null),
                 ),
                 if (i < stages.length - 1)
                   Container(
                     width: 2,
-                    height: 24,
+                    height: timestamp != null ? 36 : 24,
                     color: isPassed ? AppColors.green : AppColors.border,
                   ),
               ],
@@ -975,37 +1292,80 @@ class TransportDetailsScreen extends ConsumerWidget {
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.only(top: 2, bottom: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Text(
-                        stage.label,
-                        style: AppTextStyles.bodyMedium.copyWith(
-                          fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-                          color: isCurrent
-                              ? (transport.status.isException ? AppColors.red : AppColors.accent)
-                              : (isPassed ? AppColors.textPrimary : AppColors.textMuted),
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (isCurrent) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: (transport.status.isException ? AppColors.red : AppColors.accent).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          transport.status.isException ? 'EXCEPTION' : 'ACTIVE',
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                            color: transport.status.isException ? AppColors.red : AppColors.accent,
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            stage.label,
+                            style: AppTextStyles.bodyMedium.copyWith(
+                              fontWeight: isCurrent || (isCompleted && i == stages.length - 1)
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                              color: isCurrent
+                                  ? (isException ? AppColors.red : AppColors.accent)
+                                  : (isPassed || (isCompleted && i == stages.length - 1)
+                                      ? AppColors.textPrimary
+                                      : AppColors.textMuted),
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
+                        if (isCurrent) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: (isException ? AppColors.red : AppColors.accent).withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              isException ? transport.status.label.toUpperCase() : 'ACTIVE',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: isException ? AppColors.red : AppColors.accent,
+                              ),
+                            ),
+                          ),
+                        ] else if (isCompleted && i == stages.length - 1) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppColors.green.withValues(alpha: 0.12),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text(
+                              'COMPLETED',
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.green,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                    if (timestamp != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        DateFormatter.formatDateTime(timestamp),
+                        style: AppTextStyles.bodySmall.copyWith(
+                          fontSize: 11,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
+                    if (isCurrent && isException && transport.exceptionReason != null && transport.exceptionReason!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Incident: ${transport.exceptionReason}',
+                        style: const TextStyle(fontSize: 11, color: AppColors.red, fontStyle: FontStyle.italic),
                       ),
                     ],
                   ],
@@ -1033,6 +1393,48 @@ class TransportDetailsScreen extends ConsumerWidget {
               value,
               style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w500),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeletePod(BuildContext context, WidgetRef ref, Transport transport) {
+    showDialog(
+      context: context,
+      builder: (dlgCtx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.delete_forever, color: AppColors.red),
+            SizedBox(width: 8),
+            Text('Delete POD Document'),
+          ],
+        ),
+        content: Text(
+          'Are you sure you want to delete "${transport.pod?.fileName}"?\n\nThe transport status will revert to Container Delivered until a new Proof of Delivery is attached.',
+          style: AppTextStyles.bodyMedium,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dlgCtx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () async {
+              Navigator.of(dlgCtx).pop();
+              await ref.read(podServiceProvider).deletePod(transport.id);
+              ref.read(transportViewModelProvider.notifier).loadTransports();
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Proof of Delivery deleted. Transport status updated.'),
+                    backgroundColor: AppColors.amber,
+                  ),
+                );
+              }
+            },
+            child: const Text('Delete POD', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

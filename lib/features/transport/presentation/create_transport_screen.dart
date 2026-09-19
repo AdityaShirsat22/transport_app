@@ -106,6 +106,35 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
     super.dispose();
   }
 
+  void _clearForm() {
+    _formKey.currentState?.reset();
+    setState(() {
+      _containerSize = ContainerSize.size40Ft;
+      _shipmentType = ShipmentType.export;
+      _containerNumberCtrl.clear();
+      _sealNumberCtrl.clear();
+      _bookingNumberCtrl.text = IdGenerator.generateBookingNumber();
+      _vehicleId = null;
+      _vehicleNumber = null;
+      _driverId = null;
+      _driverName = null;
+      _driverMobile = null;
+      _partyId = null;
+      _partyName = null;
+      _partyMobile = null;
+      _bookingPartyId = null;
+      _bookingPartyName = null;
+      _shippingLineId = null;
+      _shippingLineName = null;
+      _fromLocationId = null;
+      _fromLocationName = null;
+      _toLocationId = null;
+      _toLocationName = null;
+      _portCfsId = null;
+      _portCfsName = null;
+    });
+  }
+
   Future<void> _handleCreateBooking() async {
     if (!_formKey.currentState!.validate()) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -265,12 +294,39 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
             color: AppColors.surface,
             border: Border(top: BorderSide(color: AppColors.border)),
           ),
-          child: AppButton(
-            text: 'CREATE BOOKING',
-            icon: Icons.check,
-            height: 48,
-            isLoading: _isSubmitting,
-            onPressed: _handleCreateBooking,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AppButton(
+                text: 'CREATE BOOKING',
+                icon: Icons.check,
+                height: 48,
+                isLoading: _isSubmitting,
+                onPressed: _handleCreateBooking,
+              ),
+              const SizedBox(height: 8),
+              SizedBox(
+                width: double.infinity,
+                height: 44,
+                child: OutlinedButton.icon(
+                  onPressed: _isSubmitting ? null : _clearForm,
+                  icon: const Icon(Icons.clear_all_rounded, size: 18),
+                  label: const Text('CLEAR FORM'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.textSecondary,
+                    side: const BorderSide(color: AppColors.border),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    textStyle: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

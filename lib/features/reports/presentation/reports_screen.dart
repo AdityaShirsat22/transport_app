@@ -11,6 +11,9 @@ import '../../../core/widgets/responsive_layout.dart';
 import '../../../core/widgets/status_badge.dart';
 import 'reports_view_model.dart';
 
+import 'dart:io';
+import '../data/report_export_service.dart';
+
 class ReportsScreen extends ConsumerStatefulWidget {
   const ReportsScreen({super.key});
 
@@ -33,20 +36,206 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> with SingleTicker
     super.dispose();
   }
 
-  void _exportReport(String format, String reportType) {
+  Future<void> _handleExport(String format) async {
+    final exportService = ref.read(reportExportServiceProvider);
+    final filter = ref.read(reportFilterProvider);
+
+    String title;
+    List<String> headers;
+    List<List<dynamic>> excelRows;
+    List<List<String>> pdfRows;
+    String filenamePrefix;
+
+    final dateRangeText = filter.startDate != null
+        ? 'Date Range: ${DateFormatter.formatDate(filter.startDate!)} - ${filter.endDate != null ? DateFormatter.formatDate(filter.endDate!) : "Present"}'
+        : 'Filtered Historical Records';
+
+    switch (_tabController.index) {
+      case 0:
+        title = 'Daily Transport Operations Report';
+        filenamePrefix = 'daily_transports';
+        final items = ref.read(dailyTransportReportProvider);
+        headers = [
+          'Date',
+          'Transport ID',
+          'Booking #',
+          'Container #',
+          'Customer',
+          'Vehicle',
+          'Driver',
+          'From',
+          'To',
+          'Status'
+        ];
+        excelRows = items.map((i) => [
+          DateFormatter.formatDate(i.date),
+          i.transportId,
+          i.bookingNumber,
+          i.containerNumber,
+          i.customer,
+          i.vehicle,
+          i.driver,
+          i.fromLocation,
+          i.toLocation,
+          i.status.label,
+        ]).toList();
+        pdfRows = items.map((i) => [
+          DateFormatter.formatDate(i.date),
+          i.transportId,
+          i.bookingNumber,
+          i.containerNumber,
+          i.customer,
+          i.vehicle,
+          i.driver,
+          i.fromLocation,
+          i.toLocation,
+          i.status.label,
+        ]).toList();
+        break;
+
+      case 1:
+        title = 'Trip Operations Report';
+        filenamePrefix = 'trips_report';
+        final items = ref.read(tripReportProvider);
+        headers = ['Transport ID', 'Vehicle', 'Driver', 'Route', 'Start Date', 'Completed Date', 'Status'];
+        excelRows = items.map((i) => [
+          i.transportId,
+          i.vehicle,
+          i.driver,
+          i.route,
+          DateFormatter.formatDate(i.startDate),
+          i.completionDate != null ? DateFormatter.formatDate(i.completionDate!) : '-',
+          i.status.label,
+        ]).toList();
+        pdfRows = items.map((i) => [
+          i.transportId,
+          i.vehicle,
+          i.driver,
+          i.route,
+          DateFormatter.formatDate(i.startDate),
+          i.completionDate != null ? DateFormatter.formatDate(i.completionDate!) : '-',
+          i.status.label,
+        ]).toList();
+        break;
+
+      case 2:
+        title = 'Vehicle Utilization Report';
+        filenamePrefix = 'vehicle_utilization';
+        final items = ref.read(vehicleReportProvider);
+        headers = ['Vehicle Number', 'Type', 'Capacity', 'Total Trips', 'Active Trips', 'Completed Trips', 'Cancelled Trips', 'Status'];
+        excelRows = items.map((i) => [
+          i.vehicleNumber,
+          i.vehicleType,
+          i.capacity,
+          i.totalTrips,
+          i.activeTrips,
+          i.completedTrips,
+          i.cancelledTrips,
+          i.currentStatus.label,
+        ]).toList();
+        pdfRows = items.map((i) => [
+          i.vehicleNumber,
+          i.vehicleType,
+          i.capacity,
+          i.totalTrips.toString(),
+          i.activeTrips.toString(),
+          i.completedTrips.toString(),
+          i.cancelledTrips.toString(),
+          i.currentStatus.label,
+        ]).toList();
+        break;
+
+      case 3:
+      default:
+        title = 'Customer Volume Summary Report';
+        filenamePrefix = 'customer_summary';
+        final items = ref.read(customerReportProvider);
+        headers = ['Customer Name', 'Mobile Number', 'Total Trips', 'Completed Trips', 'Pending Trips', 'Cancelled Trips'];
+        excelRows = items.map((i) => [
+          i.customerName,
+          i.mobileNumber,
+          i.totalTrips,
+          i.completedTrips,
+          i.pendingTrips,
+          i.cancelledTrips,
+        ]).toList();
+        pdfRows = items.map((i) => [
+          i.customerName,
+          i.mobileNumber,
+          i.totalTrips.toString(),
+          i.completedTrips.toString(),
+          i.pendingTrips.toString(),
+          i.cancelledTrips.toString(),
+        ]).toList();
+        break;
+    }
+
+    if (excelRows.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No records match current filters to export.'),
+            backgroundColor: AppColors.amber,
+          ),
+        );
+      }
+      return;
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.file_download_done, color: Colors.white),
-            const SizedBox(width: 10),
-            Text('$reportType exported to $format.'),
+            const SizedBox(
+              width: 16,
+              height: 16,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            ),
+            const SizedBox(width: 12),
+            Text('Generating $format report...'),
           ],
         ),
-        backgroundColor: AppColors.accent,
-        duration: const Duration(seconds: 3),
+        duration: const Duration(seconds: 1),
       ),
     );
+
+    try {
+      File file;
+      if (format.toLowerCase().contains('excel') || format.toLowerCase().contains('xlsx')) {
+        file = await exportService.exportToExcel(
+          title: title,
+          headers: headers,
+          rows: excelRows,
+          filenamePrefix: filenamePrefix,
+        );
+      } else {
+        file = await exportService.exportToPdf(
+          title: title,
+          subtitle: dateRangeText,
+          headers: headers,
+          rows: pdfRows,
+          filenamePrefix: filenamePrefix,
+        );
+      }
+
+      if (mounted) {
+        await exportService.showExportResultSheet(
+          context: context,
+          file: file,
+          title: title,
+          formatName: format,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to generate export: $e'),
+            backgroundColor: AppColors.red,
+          ),
+        );
+      }
+    }
   }
 
   @override
@@ -70,13 +259,13 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> with SingleTicker
                     text: 'Export Excel',
                     icon: Icons.table_view_outlined,
                     variant: AppButtonVariant.outline,
-                    onPressed: () => _exportReport('Excel (.xlsx)', _getTabName(_tabController.index)),
+                    onPressed: () => _handleExport('Excel (.xlsx)'),
                   ),
                   AppButton(
                     text: 'Export PDF',
                     icon: Icons.picture_as_pdf_outlined,
                     variant: AppButtonVariant.secondary,
-                    onPressed: () => _exportReport('PDF Document', _getTabName(_tabController.index)),
+                    onPressed: () => _handleExport('PDF Document'),
                   ),
                 ],
               )
@@ -107,7 +296,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> with SingleTicker
                         child: const Icon(Icons.download, size: 18, color: AppColors.accent),
                       ),
                       tooltip: 'Export Report',
-                      onSelected: (val) => _exportReport(val, _getTabName(_tabController.index)),
+                      onSelected: (val) => _handleExport(val),
                       itemBuilder: (ctx) => const [
                         PopupMenuItem(value: 'Excel (.xlsx)', child: Text('Export as Excel (.xlsx)')),
                         PopupMenuItem(value: 'PDF Document', child: Text('Export as PDF')),
@@ -183,20 +372,6 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> with SingleTicker
     );
   }
 
-  String _getTabName(int index) {
-    switch (index) {
-      case 0:
-        return 'Daily Transport Report';
-      case 1:
-        return 'Trip Report';
-      case 2:
-        return 'Vehicle Utilization Report';
-      case 3:
-        return 'Customer Summary Report';
-      default:
-        return 'Report';
-    }
-  }
 
   Widget _buildDailyReport() {
     final items = ref.watch(dailyTransportReportProvider);

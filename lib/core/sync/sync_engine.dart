@@ -13,6 +13,7 @@ class SyncState {
   final int pendingCount;
   final DateTime? lastSyncedAt;
   final String? errorMessage;
+  final bool hasCompletedStartupSync;
 
   const SyncState({
     this.isOnline = true,
@@ -20,6 +21,7 @@ class SyncState {
     this.pendingCount = 0,
     this.lastSyncedAt,
     this.errorMessage,
+    this.hasCompletedStartupSync = false,
   });
 
   SyncState copyWith({
@@ -29,6 +31,7 @@ class SyncState {
     DateTime? lastSyncedAt,
     String? errorMessage,
     bool clearError = false,
+    bool? hasCompletedStartupSync,
   }) {
     return SyncState(
       isOnline: isOnline ?? this.isOnline,
@@ -36,6 +39,7 @@ class SyncState {
       pendingCount: pendingCount ?? this.pendingCount,
       lastSyncedAt: lastSyncedAt ?? this.lastSyncedAt,
       errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
+      hasCompletedStartupSync: hasCompletedStartupSync ?? this.hasCompletedStartupSync,
     );
   }
 }
@@ -105,16 +109,18 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
         try {
           final payload = jsonDecode(item.payload) as Map<String, dynamic>;
           final tableName = _resolveSupabaseTable(item.entityType);
+          final sanitizedPayload = _sanitizePayload(tableName, payload);
 
           if (item.operation == 'DELETE') {
             await client.from(tableName).delete().eq('id', item.entityId);
           } else {
-            await client.from(tableName).upsert(payload);
+            await client.from(tableName).upsert(sanitizedPayload);
           }
 
           await _db.deleteSyncQueueItem(item.id);
         } catch (err) {
           await _db.updateSyncQueueStatus(item.id, 'FAILED', error: err.toString());
+          state = state.copyWith(errorMessage: err.toString());
         }
       }
 
@@ -123,6 +129,7 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
         isSyncing: false,
         pendingCount: remaining.length,
         lastSyncedAt: DateTime.now(),
+        clearError: remaining.isEmpty,
       );
     } catch (e) {
       state = state.copyWith(
@@ -130,6 +137,28 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
         errorMessage: e.toString(),
       );
     }
+  }
+
+  /// Automatic startup sync: called once on app launch when online.
+  /// Fetches all cloud data into local SQLite so the UI always shows current data on restart.
+  Future<void> startupSync() async {
+    final client = _client;
+    if (client == null) {
+      // Not connected to Supabase — mark done so the shell doesn't wait forever
+      state = state.copyWith(hasCompletedStartupSync: true);
+      return;
+    }
+
+    final online = await _connectivity.checkOnline();
+    if (!online) {
+      // Offline — use cached SQLite data; mark done
+      state = state.copyWith(isOnline: false, hasCompletedStartupSync: true);
+      return;
+    }
+
+    // Online + Supabase configured: refresh local DB from cloud
+    await restoreFromCloud();
+    state = state.copyWith(hasCompletedStartupSync: true);
   }
 
   /// Device Recovery / Initial Sync: Download all cloud data into local Drift DB
@@ -261,6 +290,7 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
                 shipmentType: Value(t['shipment_type']),
                 partyId: Value(t['party_id']),
                 partyName: Value(t['party_name']),
+                partyMobile: Value(t['party_mobile']),
                 bookingPartyId: Value(t['booking_party_id']),
                 bookingPartyName: Value(t['booking_party_name']),
                 shippingLineId: Value(t['shipping_line_id']),
@@ -278,12 +308,34 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
                 driverMobile: Value(t['driver_mobile']),
                 status: Value(t['status']),
                 exceptionReason: Value(t['exception_reason']),
+                completedAt: Value(t['completed_at'] != null ? DateTime.parse(t['completed_at']) : null),
                 createdAt: Value(DateTime.parse(t['created_at'])),
                 updatedAt: Value(DateTime.parse(t['updated_at'])),
               ),
             );
         totalRestored++;
       }
+
+      // 8. POD Documents
+      try {
+        final pods = await client.from('pod_documents').select();
+        for (final p in pods) {
+          await _db.into(_db.localPodDocuments).insertOnConflictUpdate(
+                LocalPodDocumentsCompanion(
+                  id: Value(p['id']),
+                  transportId: Value(p['transport_id']),
+                  fileName: Value(p['file_name']),
+                  storagePath: Value(p['storage_path']),
+                  fileType: Value(p['file_type']),
+                  fileSize: Value(BigInt.from(p['file_size'] ?? 0)),
+                  uploadedBy: const Value('Super Admin'),
+                  uploadedAt: Value(DateTime.parse(p['uploaded_at'])),
+                  fileUrl: const Value(null),
+                ),
+              );
+          totalRestored++;
+        }
+      } catch (_) {}
 
       state = state.copyWith(
         isSyncing: false,
@@ -294,6 +346,55 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
       state = state.copyWith(isSyncing: false, errorMessage: e.toString());
       return totalRestored;
     }
+  }
+
+  Map<String, dynamic> _sanitizePayload(String tableName, Map<String, dynamic> payload) {
+    final clean = Map<String, dynamic>.from(payload);
+    if (tableName == 'transports') {
+      clean.remove('party_mobile');
+    } else if (tableName == 'vehicle_assignments') {
+      clean.remove('assigned_by');
+      clean.remove('is_active');
+    } else if (tableName == 'driver_assignments') {
+      clean.remove('assigned_by');
+      clean.remove('is_active');
+    } else if (tableName == 'transport_status_history') {
+      if (clean.containsKey('status') && !clean.containsKey('to_status')) {
+        clean['to_status'] = clean.remove('status');
+      }
+      if (clean.containsKey('remarks') && !clean.containsKey('reason')) {
+        clean['reason'] = clean.remove('remarks');
+      }
+      if (clean.containsKey('created_at') && !clean.containsKey('changed_at')) {
+        clean['changed_at'] = clean.remove('created_at');
+      }
+    } else if (tableName == 'activity_logs') {
+      clean.remove('user_id');
+      if (clean.containsKey('action') && !clean.containsKey('title')) {
+        clean['title'] = clean.remove('action');
+      }
+      if (clean.containsKey('created_at') && !clean.containsKey('timestamp')) {
+        clean['timestamp'] = clean.remove('created_at');
+      }
+    } else if (tableName == 'notification_logs') {
+      clean.remove('recipient_name');
+      if (clean.containsKey('recipient_mobile') && !clean.containsKey('recipient_phone')) {
+        clean['recipient_phone'] = clean.remove('recipient_mobile');
+      }
+      if (clean.containsKey('message_body') && !clean.containsKey('message')) {
+        clean['message'] = clean.remove('message_body');
+      }
+    } else if (tableName == 'pod_documents') {
+      clean.remove('file_url');
+      clean.remove('uploaded_by');
+    }
+    return clean;
+  }
+
+  /// Purge all pending/failed queue items in case of unresolvable sync blocks
+  Future<void> clearSyncQueue() async {
+    await _db.delete(_db.localSyncQueue).go();
+    state = state.copyWith(pendingCount: 0, clearError: true);
   }
 
   String _resolveSupabaseTable(String entityType) {

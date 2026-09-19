@@ -152,9 +152,9 @@ class SettingsScreen extends ConsumerWidget {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(user?.name ?? 'Aditya Ops Manager', style: AppTextStyles.headingMedium),
+                            Text(user?.name ?? AppConstants.defaultUserName, style: AppTextStyles.headingMedium),
                             const SizedBox(height: 4),
-                            Text(user?.email ?? EnvConfig.defaultAdminEmail, style: AppTextStyles.bodyMedium),
+                            Text(user?.email ?? EnvConfig.adminEmail, style: AppTextStyles.bodyMedium),
                             const SizedBox(height: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
@@ -164,7 +164,7 @@ class SettingsScreen extends ConsumerWidget {
                                 border: Border.all(color: AppColors.accent.withValues(alpha: 0.4)),
                               ),
                               child: Text(
-                                user?.role ?? 'Super Admin',
+                                user?.role ?? AppConstants.defaultUserRole,
                                 style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.accentLight),
                               ),
                             ),
@@ -212,6 +212,13 @@ class SettingsScreen extends ConsumerWidget {
                     'Last Synced: ${syncState.lastSyncedAt != null ? syncState.lastSyncedAt.toString().substring(0, 19) : "Never"}',
                     style: AppTextStyles.bodySmall,
                   ),
+                  if (syncState.errorMessage != null) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'Sync Error: ${syncState.errorMessage}',
+                      style: const TextStyle(fontSize: 12, color: AppColors.red),
+                    ),
+                  ],
                   const SizedBox(height: 16),
                   Wrap(
                     spacing: 12,
@@ -224,6 +231,24 @@ class SettingsScreen extends ConsumerWidget {
                             ? null
                             : () => ref.read(syncEngineProvider.notifier).syncPending(),
                       ),
+                      if (syncState.pendingCount > 0)
+                        OutlinedButton.icon(
+                          icon: const Icon(Icons.delete_sweep_outlined, size: 18, color: AppColors.red),
+                          label: const Text('Clear Stuck Queue', style: TextStyle(color: AppColors.red)),
+                          onPressed: syncState.isSyncing
+                              ? null
+                              : () async {
+                                  await ref.read(syncEngineProvider.notifier).clearSyncQueue();
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text('Sync queue cleared.'),
+                                        backgroundColor: AppColors.textPrimary,
+                                      ),
+                                    );
+                                  }
+                                },
+                        ),
                       OutlinedButton.icon(
                         icon: const Icon(Icons.cloud_download_outlined, size: 18),
                         label: const Text('Restore Cloud Data (Device Loss)'),

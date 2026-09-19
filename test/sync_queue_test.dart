@@ -1,3 +1,4 @@
+import 'package:drift/drift.dart' hide isNotNull, isNull;
 import 'package:drift/native.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:transport_app/core/database/app_database.dart';
@@ -74,6 +75,43 @@ void main() {
 
       items = await db.getPendingSyncQueue();
       expect(items, isEmpty);
+    });
+
+    test('Transport persistence and migration handles party_mobile column gracefully', () async {
+      final now = DateTime.now();
+      await db.into(db.localTransports).insertOnConflictUpdate(
+            LocalTransportsCompanion(
+              id: const Value('test-tr-mig'),
+              transportNumber: const Value('test-tr-mig'),
+              bookingNumber: const Value('BK-TEST'),
+              containerNumber: const Value('CONT-1'),
+              sealNumber: const Value('SEAL-1'),
+              containerSize: const Value('40 FT'),
+              shipmentType: const Value('EXPORT'),
+              partyId: const Value('p-1'),
+              partyName: const Value('Party 1'),
+              partyMobile: const Value('9876543210'),
+              bookingPartyId: const Value('p-1'),
+              bookingPartyName: const Value('Party 1'),
+              shippingLineId: const Value('s-1'),
+              shippingLineName: const Value('Line 1'),
+              fromLocationId: const Value('loc-1'),
+              fromLocationName: const Value('From 1'),
+              toLocationId: const Value('loc-2'),
+              toLocationName: const Value('To 2'),
+              portCfsId: const Value('port-1'),
+              portCfsName: const Value('Port 1'),
+              status: const Value('COMPLETED'),
+              completedAt: Value(now),
+              createdAt: Value(now),
+              updatedAt: Value(now),
+            ),
+          );
+
+      final row = await (db.select(db.localTransports)..where((t) => t.id.equals('test-tr-mig'))).getSingle();
+      expect(row.status, equals('COMPLETED'));
+      expect(row.partyMobile, equals('9876543210'));
+      expect(row.completedAt, isNotNull);
     });
   });
 }
