@@ -232,29 +232,42 @@ class DriverListScreen extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Row(
-                              children: [
-                                CircleAvatar(
-                                  radius: 18,
-                                  backgroundColor: AppColors.purple.withValues(alpha: 0.15),
-                                  child: Text(
-                                    d.name.isNotEmpty ? d.name.substring(0, 1).toUpperCase() : 'D',
-                                    style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.purple),
+                            Expanded(
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  CircleAvatar(
+                                    radius: 18,
+                                    backgroundColor: AppColors.purple.withValues(alpha: 0.15),
+                                    child: Text(
+                                      d.name.isNotEmpty ? d.name.substring(0, 1).toUpperCase() : 'D',
+                                      style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.purple),
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 12),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(d.name, style: AppTextStyles.labelLarge.copyWith(fontWeight: FontWeight.bold)),
-                                    const SizedBox(height: 2),
-                                    Text(d.mobileNumber, style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary)),
-                                  ],
-                                ),
-                              ],
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          d.name,
+                                          style: AppTextStyles.labelLarge.copyWith(fontWeight: FontWeight.bold),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        Text(
+                                          d.mobileNumber,
+                                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
+                            const SizedBox(width: 8),
                             StatusBadge.fromDriver(d.status),
                           ],
                         ),
@@ -269,10 +282,13 @@ class DriverListScreen extends ConsumerWidget {
                             children: [
                               const Icon(Icons.local_shipping_outlined, size: 16, color: AppColors.textSecondary),
                               const SizedBox(width: 8),
-                              Text(
-                                'Assigned Truck: ${d.currentVehicleNumber ?? "None"}',
-                                style: AppTextStyles.bodySmall.copyWith(
-                                  color: d.currentVehicleNumber != null ? AppColors.textPrimary : AppColors.textMuted,
+                              Expanded(
+                                child: Text(
+                                  'Assigned Truck: ${d.currentVehicleNumber ?? "None"}',
+                                  style: AppTextStyles.bodySmall.copyWith(
+                                    color: d.currentVehicleNumber != null ? AppColors.textPrimary : AppColors.textMuted,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
@@ -297,11 +313,13 @@ class DriverListScreen extends ConsumerWidget {
                                 IconButton(
                                   icon: const Icon(Icons.edit_outlined, size: 20),
                                   tooltip: 'Edit Driver',
+                                  visualDensity: VisualDensity.compact,
                                   onPressed: () => _showEditDialog(context, ref, d),
                                 ),
                                 IconButton(
                                   icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.red),
                                   tooltip: 'Delete Driver',
+                                  visualDensity: VisualDensity.compact,
                                   onPressed: () => _confirmDelete(context, ref, d),
                                 ),
                               ],

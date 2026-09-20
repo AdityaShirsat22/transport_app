@@ -125,15 +125,19 @@ class _DriverFormDialogState extends State<DriverFormDialog> {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              AppButton(
-                text: 'Cancel',
-                variant: AppButtonVariant.outline,
-                onPressed: () => Navigator.of(context).pop(),
+              Expanded(
+                child: AppButton(
+                  text: 'Cancel',
+                  variant: AppButtonVariant.outline,
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
               ),
               const SizedBox(width: 12),
-              AppButton(
-                text: isEdit ? 'Save Changes' : 'Register Driver',
-                onPressed: _submit,
+              Expanded(
+                child: AppButton(
+                  text: isEdit ? 'Save Changes' : 'Register Driver',
+                  onPressed: _submit,
+                ),
               ),
             ],
           ),

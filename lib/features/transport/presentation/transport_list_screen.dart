@@ -98,13 +98,15 @@ class TransportListScreen extends ConsumerWidget {
                   ),
                   const SizedBox(width: 8),
                   ...[
+                    TransportStatus.bookingCreated,
                     TransportStatus.vehiclePending,
                     TransportStatus.vehicleAssigned,
-                    TransportStatus.vehicleReported,
-                    TransportStatus.inTransit,
+                    TransportStatus.containerPickedUp,
                     TransportStatus.atPortCfs,
-                    TransportStatus.containerDelivered,
+                    TransportStatus.podReceived,
                     TransportStatus.completed,
+                    TransportStatus.onHold,
+                    TransportStatus.cancelled,
                   ].map((s) {
                     final isSelected = state.statusFilter == s;
                     return Padding(

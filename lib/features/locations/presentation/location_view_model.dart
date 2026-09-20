@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/enums/location_type.dart';
+import '../../../core/sync/sync_engine.dart';
 import '../data/location_repository.dart';
 import '../domain/location_model.dart';
 
@@ -43,8 +44,9 @@ class LocationState {
 
 class LocationViewModel extends StateNotifier<LocationState> {
   final LocationRepository _repo;
+  final void Function() _autoSync;
 
-  LocationViewModel(this._repo) : super(const LocationState()) {
+  LocationViewModel(this._repo, this._autoSync) : super(const LocationState()) {
     loadLocations();
   }
 
@@ -73,21 +75,25 @@ class LocationViewModel extends StateNotifier<LocationState> {
     );
     _repo.add(item);
     loadLocations();
+    _autoSync();
   }
 
   void updateLocation(Location location) {
     _repo.update(location);
     loadLocations();
+    _autoSync();
   }
 
   void deleteLocation(String id) {
     _repo.delete(id);
     loadLocations();
+    _autoSync();
   }
 }
 
 final locationViewModelProvider =
     StateNotifierProvider<LocationViewModel, LocationState>((ref) {
   final repo = ref.watch(locationRepositoryProvider);
-  return LocationViewModel(repo);
+  final sync = ref.read(syncEngineProvider.notifier);
+  return LocationViewModel(repo, () => sync.triggerAutoSync());
 });

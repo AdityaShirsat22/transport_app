@@ -30,6 +30,7 @@ class Driver {
     DriverStatus? status,
     String? currentVehicleId,
     String? currentVehicleNumber,
+    bool clearCurrentVehicle = false,
     bool? isActive,
     DateTime? createdAt,
   }) {
@@ -38,8 +39,8 @@ class Driver {
       name: name ?? this.name,
       mobileNumber: mobileNumber ?? this.mobileNumber,
       status: status ?? this.status,
-      currentVehicleId: currentVehicleId,
-      currentVehicleNumber: currentVehicleNumber,
+      currentVehicleId: clearCurrentVehicle ? null : (currentVehicleId ?? this.currentVehicleId),
+      currentVehicleNumber: clearCurrentVehicle ? null : (currentVehicleNumber ?? this.currentVehicleNumber),
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
     );

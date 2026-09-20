@@ -162,33 +162,48 @@ class PartyListScreen extends ConsumerWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(8),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.accent.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(8),
+                            Expanded(
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.accent.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(Icons.business, size: 18, color: AppColors.accent),
                                   ),
-                                  child: const Icon(Icons.business, size: 18, color: AppColors.accent),
-                                ),
-                                const SizedBox(width: 10),
-                                Text(p.name, style: AppTextStyles.labelLarge.copyWith(fontWeight: FontWeight.bold)),
-                              ],
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Padding(
+                                      padding: const EdgeInsets.only(top: 6),
+                                      child: Text(
+                                        p.name,
+                                        style: AppTextStyles.labelLarge.copyWith(fontWeight: FontWeight.bold),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
+                            const SizedBox(width: 4),
                             Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 IconButton(
                                   icon: const Icon(Icons.edit_outlined, size: 20),
                                   tooltip: 'Edit Party',
+                                  visualDensity: VisualDensity.compact,
                                   onPressed: () => _showEditDialog(context, ref, p),
                                 ),
                                 IconButton(
                                   icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.red),
                                   tooltip: 'Delete Party',
+                                  visualDensity: VisualDensity.compact,
                                   onPressed: () => _confirmDelete(context, ref, p),
                                 ),
                               ],
@@ -201,27 +216,45 @@ class PartyListScreen extends ConsumerWidget {
                             const Icon(Icons.phone_outlined, size: 14, color: AppColors.textSecondary),
                             const SizedBox(width: 6),
                             Text(p.mobileNumber, style: AppTextStyles.bodySmall),
-                            const SizedBox(width: 14),
-                            const Icon(Icons.location_on_outlined, size: 14, color: AppColors.textSecondary),
-                            const SizedBox(width: 4),
-                            Text(p.city, style: AppTextStyles.bodySmall),
+                            if (p.city.isNotEmpty) ...[
+                              const SizedBox(width: 14),
+                              const Icon(Icons.location_on_outlined, size: 14, color: AppColors.textSecondary),
+                              const SizedBox(width: 4),
+                              Expanded(
+                                child: Text(
+                                  p.city,
+                                  style: AppTextStyles.bodySmall,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ],
                         ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            const Icon(Icons.email_outlined, size: 14, color: AppColors.textSecondary),
-                            const SizedBox(width: 6),
-                            Text(p.email, style: AppTextStyles.bodySmall),
-                          ],
-                        ),
+                        if (p.email.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(Icons.email_outlined, size: 14, color: AppColors.textSecondary),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  p.email,
+                                  style: AppTextStyles.bodySmall,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
                         const Divider(height: 18),
-                        Row(
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 6,
                           children: [
                             _buildStatBadge('Total', '${item.totalTrips}', AppColors.blue),
-                            const SizedBox(width: 8),
                             _buildStatBadge('Active', '${item.activeTrips}', AppColors.amber),
-                            const SizedBox(width: 8),
                             _buildStatBadge('Done', '${item.completedTrips}', AppColors.green),
                           ],
                         ),

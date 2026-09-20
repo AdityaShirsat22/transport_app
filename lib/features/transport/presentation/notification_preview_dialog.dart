@@ -98,7 +98,7 @@ _For queries, please reply to this message or contact our office._
         return '''🚛 *TRANSLOGIX FLEET – TRIP ASSIGNMENT*
 ——————————————————
 
-Dear *${t?.driverName ?? 'Driver'}*,
+Dear Driver,
 You have been assigned a new transport trip. Please review the details below.
 
 📋 *TRIP DETAILS:*

@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/enums/port_cfs_type.dart';
+import '../../../core/sync/sync_engine.dart';
 import '../data/port_cfs_repository.dart';
 import '../domain/port_cfs_model.dart';
 
@@ -45,8 +46,9 @@ class PortCfsState {
 
 class PortCfsViewModel extends StateNotifier<PortCfsState> {
   final PortCfsRepository _repo;
+  final void Function() _autoSync;
 
-  PortCfsViewModel(this._repo) : super(const PortCfsState()) {
+  PortCfsViewModel(this._repo, this._autoSync) : super(const PortCfsState()) {
     loadItems();
   }
 
@@ -80,21 +82,25 @@ class PortCfsViewModel extends StateNotifier<PortCfsState> {
     );
     _repo.add(item);
     loadItems();
+    _autoSync();
   }
 
   void updatePortCfs(PortCfs item) {
     _repo.update(item);
     loadItems();
+    _autoSync();
   }
 
   void deletePortCfs(String id) {
     _repo.delete(id);
     loadItems();
+    _autoSync();
   }
 }
 
 final portCfsViewModelProvider =
     StateNotifierProvider<PortCfsViewModel, PortCfsState>((ref) {
   final repo = ref.watch(portCfsRepositoryProvider);
-  return PortCfsViewModel(repo);
+  final sync = ref.read(syncEngineProvider.notifier);
+  return PortCfsViewModel(repo, () => sync.triggerAutoSync());
 });

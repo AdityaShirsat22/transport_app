@@ -43,6 +43,7 @@ class Vehicle {
     VehicleStatus? status,
     String? assignedDriverId,
     String? assignedDriverName,
+    bool clearAssignedDriver = false,
     bool? isActive,
     DateTime? createdAt,
   }) {
@@ -52,8 +53,8 @@ class Vehicle {
       vehicleType: vehicleType ?? this.vehicleType,
       capacity: capacity ?? this.capacity,
       status: status ?? this.status,
-      assignedDriverId: assignedDriverId,
-      assignedDriverName: assignedDriverName,
+      assignedDriverId: clearAssignedDriver ? null : (assignedDriverId ?? this.assignedDriverId),
+      assignedDriverName: clearAssignedDriver ? null : (assignedDriverName ?? this.assignedDriverName),
       isActive: isActive ?? this.isActive,
       createdAt: createdAt ?? this.createdAt,
     );

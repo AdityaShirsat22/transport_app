@@ -9,12 +9,16 @@ import 'package:transport_app/core/enums/transport_status.dart';
 import 'package:transport_app/core/enums/vehicle_status.dart';
 import 'package:transport_app/features/drivers/data/driver_repository.dart';
 import 'package:transport_app/features/drivers/domain/driver_model.dart';
+import 'package:transport_app/features/drivers/presentation/driver_view_model.dart';
 import 'package:transport_app/features/transport/data/transport_repository.dart';
+import 'package:transport_app/features/transport/domain/transport_allocation.dart';
 import 'package:transport_app/features/transport/presentation/transport_view_model.dart';
 import 'package:transport_app/features/vehicles/data/vehicle_repository.dart';
 import 'package:transport_app/features/vehicles/domain/vehicle_model.dart';
+import 'package:transport_app/features/vehicles/presentation/vehicle_view_model.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
   late AppDatabase db;
   late ProviderContainer container;
 
@@ -46,11 +50,30 @@ void main() {
         createdAt: now,
       ),
     );
+    vRepo.add(
+      Vehicle(
+        id: 'test-wf-veh-2',
+        vehicleNumber: 'MH-12-CD-8888',
+        vehicleType: 'Trailer 40FT',
+        capacity: '40 FT',
+        status: VehicleStatus.available,
+        createdAt: now,
+      ),
+    );
     dRepo.add(
       Driver(
         id: 'test-wf-drv-1',
         name: 'Ganesh Shinde',
         mobileNumber: '9820099887',
+        status: DriverStatus.available,
+        createdAt: now,
+      ),
+    );
+    dRepo.add(
+      Driver(
+        id: 'test-wf-drv-2',
+        name: 'Sunil Rao',
+        mobileNumber: '9820088776',
         status: DriverStatus.available,
         createdAt: now,
       ),
@@ -97,23 +120,23 @@ void main() {
       final assignedVehId = outcome.transport.vehicleId!;
       final assignedDrvId = outcome.transport.driverId!;
 
-      // Cannot be completed yet (no POD)
+      // Cannot be completed yet (still in early assignment stage)
       final current = vm.getTransportById(transportId);
       expect(current!.canBeCompleted, isFalse);
 
-      // Upload POD
-      vm.uploadPod(
-        transportId: transportId,
-        fileName: 'POD_TEST_SIGNED.pdf',
-        fileType: 'PDF',
-        fileSize: 256000,
-      );
+      // Advance through streamlined milestones
+      vm.updateStatus(transportId, TransportStatus.containerPickedUp);
+      vm.updateStatus(transportId, TransportStatus.atPortCfs);
+      expect(vm.getTransportById(transportId)!.canBeCompleted, isFalse);
 
-      final withPod = vm.getTransportById(transportId);
-      expect(withPod!.status, equals(TransportStatus.podReceived));
-      expect(withPod.canBeCompleted, isTrue);
+      // Advance to POD milestone in timeline
+      vm.updateStatus(transportId, TransportStatus.podReceived);
 
-      // Complete Transport
+      final atPod = vm.getTransportById(transportId);
+      expect(atPod!.status, equals(TransportStatus.podReceived));
+      expect(atPod.canBeCompleted, isTrue);
+
+      // Complete Transport directly
       vm.completeTransport(transportId);
 
       final completed = vm.getTransportById(transportId);
@@ -246,6 +269,103 @@ void main() {
       // Verify vehicle and driver released back to available
       expect(vRepo.getById('test-wf-veh-1')!.status, equals(VehicleStatus.available));
       expect(dRepo.getById('test-wf-drv-1')!.status, equals(DriverStatus.available));
+    });
+
+    test('Multi-vehicle and driver booking updates VehicleViewModel and DriverViewModel states immediately', () async {
+      final tVm = container.read(transportViewModelProvider.notifier);
+
+      // Initially both vehicles and drivers are available in view models
+      expect(container.read(vehicleViewModelProvider).vehicles.firstWhere((v) => v.id == 'test-wf-veh-1').status, equals(VehicleStatus.available));
+      expect(container.read(vehicleViewModelProvider).vehicles.firstWhere((v) => v.id == 'test-wf-veh-2').status, equals(VehicleStatus.available));
+      expect(container.read(driverViewModelProvider).drivers.firstWhere((d) => d.id == 'test-wf-drv-1').status, equals(DriverStatus.available));
+      expect(container.read(driverViewModelProvider).drivers.firstWhere((d) => d.id == 'test-wf-drv-2').status, equals(DriverStatus.available));
+
+      final now = DateTime.now();
+      final allocations = [
+        TransportAllocation(
+          id: 'alloc-test-1',
+          transportId: '',
+          slotIndex: 0,
+          vehicleId: 'test-wf-veh-1',
+          vehicleNumber: 'MH-12-AB-9999',
+          driverId: 'test-wf-drv-1',
+          driverName: 'Ganesh Shinde',
+          driverMobile: '9820099887',
+          assignedAt: now,
+        ),
+        TransportAllocation(
+          id: 'alloc-test-2',
+          transportId: '',
+          slotIndex: 1,
+          vehicleId: 'test-wf-veh-2',
+          vehicleNumber: 'MH-12-CD-8888',
+          driverId: 'test-wf-drv-2',
+          driverName: 'Sunil Rao',
+          driverMobile: '9820088776',
+          assignedAt: now,
+        ),
+      ];
+
+      final outcome = await tVm.createBooking(
+        containerSize: ContainerSize.size40Ft,
+        shipmentType: ShipmentType.export,
+        containerNumber: 'MULTI1234567',
+        sealNumber: 'SL-MULTI-1',
+        partyId: 'pty-1',
+        partyName: 'ABC Logistics',
+        partyMobile: '9822001122',
+        bookingPartyId: 'pty-1',
+        bookingPartyName: 'ABC Logistics',
+        shippingLineId: 'shp-1',
+        shippingLineName: 'MSC',
+        bookingNumber: 'BK-MULTI-001',
+        fromLocationId: 'loc-1',
+        fromLocationName: 'Pune Factory',
+        toLocationId: 'loc-2',
+        toLocationName: 'JNPT Port',
+        portCfsId: 'pc-1',
+        portCfsName: 'JNPT CFS',
+        allocations: allocations,
+      );
+
+      expect(outcome.wasAssigned, isTrue);
+
+      // Verify VehicleViewModel immediately reflects ON_TRIP and assigned drivers
+      final v1 = container.read(vehicleViewModelProvider).vehicles.firstWhere((v) => v.id == 'test-wf-veh-1');
+      expect(v1.status, equals(VehicleStatus.onTrip));
+      expect(v1.assignedDriverName, equals('Ganesh Shinde'));
+
+      final v2 = container.read(vehicleViewModelProvider).vehicles.firstWhere((v) => v.id == 'test-wf-veh-2');
+      expect(v2.status, equals(VehicleStatus.onTrip));
+      expect(v2.assignedDriverName, equals('Sunil Rao'));
+
+      // Verify DriverViewModel immediately reflects ON_TRIP and assigned vehicles
+      final d1 = container.read(driverViewModelProvider).drivers.firstWhere((d) => d.id == 'test-wf-drv-1');
+      expect(d1.status, equals(DriverStatus.onTrip));
+      expect(d1.currentVehicleNumber, equals('MH-12-AB-9999'));
+
+      final d2 = container.read(driverViewModelProvider).drivers.firstWhere((d) => d.id == 'test-wf-drv-2');
+      expect(d2.status, equals(DriverStatus.onTrip));
+      expect(d2.currentVehicleNumber, equals('MH-12-CD-8888'));
+
+      // Now complete the transport and verify all resources released to AVAILABLE in view models
+      tVm.completeTransport(outcome.transport.id);
+
+      final v1After = container.read(vehicleViewModelProvider).vehicles.firstWhere((v) => v.id == 'test-wf-veh-1');
+      expect(v1After.status, equals(VehicleStatus.available));
+      expect(v1After.assignedDriverName, isNull);
+
+      final v2After = container.read(vehicleViewModelProvider).vehicles.firstWhere((v) => v.id == 'test-wf-veh-2');
+      expect(v2After.status, equals(VehicleStatus.available));
+      expect(v2After.assignedDriverName, isNull);
+
+      final d1After = container.read(driverViewModelProvider).drivers.firstWhere((d) => d.id == 'test-wf-drv-1');
+      expect(d1After.status, equals(DriverStatus.available));
+      expect(d1After.currentVehicleNumber, isNull);
+
+      final d2After = container.read(driverViewModelProvider).drivers.firstWhere((d) => d.id == 'test-wf-drv-2');
+      expect(d2After.status, equals(DriverStatus.available));
+      expect(d2After.currentVehicleNumber, isNull);
     });
   });
 }

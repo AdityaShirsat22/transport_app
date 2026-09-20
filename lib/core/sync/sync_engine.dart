@@ -65,24 +65,46 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
   }
 
   Future<void> _init() async {
-    final online = await _connectivity.checkOnline();
-    final queue = await _db.getPendingSyncQueue();
-    state = state.copyWith(isOnline: online, pendingCount: queue.length);
+    try {
+      final online = await _connectivity.checkOnline();
+      final queue = await _db.getPendingSyncQueue();
+      if (!mounted) return;
+      state = state.copyWith(isOnline: online, pendingCount: queue.length);
 
-    _connSub = _connectivity.onConnectivityChanged.listen((online) {
-      state = state.copyWith(isOnline: online);
-      if (online) {
-        syncPending();
-      }
-    });
+      _connSub = _connectivity.onConnectivityChanged.listen((online) {
+        if (!mounted) return;
+        state = state.copyWith(isOnline: online);
+        if (online) {
+          syncPending();
+        }
+      });
+    } catch (_) {}
+  }
+
+  /// Called by ViewModels immediately after writing any data.
+  /// When online, drains the queue right away so data reaches Supabase
+  /// without the user needing to press "Sync Now".
+  /// When offline, the item stays queued and will be sent once reconnected.
+  Future<void> triggerAutoSync() async {
+    if (!mounted) return;
+    if (!state.isOnline) return; // stay queued, will sync on reconnect
+    if (state.isSyncing) return; // already in progress, new item will be swept
+    await syncPending();
   }
 
   /// Sync all pending items from local queue to Supabase
   Future<void> syncPending() async {
+    if (!mounted) return;
     if (state.isSyncing) return;
 
     final client = _client;
-    final queue = await _db.getPendingSyncQueue();
+    final List queue;
+    try {
+      queue = await _db.getPendingSyncQueue();
+    } catch (_) {
+      return;
+    }
+    if (!mounted) return;
     state = state.copyWith(pendingCount: queue.length);
 
     if (queue.isEmpty) return;
@@ -91,40 +113,41 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
 
     if (client == null) {
       // Offline / standalone mode: mark as synced locally
-      for (final item in queue) {
-        await _db.updateSyncQueueStatus(item.id, 'SYNCED');
-      }
-      final remaining = await _db.getPendingSyncQueue();
-      state = state.copyWith(
-        isSyncing: false,
-        pendingCount: remaining.length,
-        lastSyncedAt: DateTime.now(),
-      );
+      try {
+        for (final item in queue) {
+          await _db.updateSyncQueueStatus(item.id, 'SYNCED');
+        }
+        final remaining = await _db.getPendingSyncQueue();
+        if (!mounted) return;
+        state = state.copyWith(
+          isSyncing: false,
+          pendingCount: remaining.length,
+          lastSyncedAt: DateTime.now(),
+        );
+      } catch (_) {}
       return;
     }
 
     try {
       for (final item in queue) {
-        await _db.updateSyncQueueStatus(item.id, 'SYNCING');
         try {
-          final payload = jsonDecode(item.payload) as Map<String, dynamic>;
           final tableName = _resolveSupabaseTable(item.entityType);
-          final sanitizedPayload = _sanitizePayload(tableName, payload);
+          final rawPayload = jsonDecode(item.payload) as Map<String, dynamic>;
+          final payload = _sanitizePayload(tableName, rawPayload);
 
-          if (item.operation == 'DELETE') {
-            await client.from(tableName).delete().eq('id', item.entityId);
-          } else {
-            await client.from(tableName).upsert(sanitizedPayload);
+          if (item.operation == 'CREATE' || item.operation == 'UPDATE') {
+            await client.from(tableName).upsert(payload);
+          } else if (item.operation == 'DELETE') {
+            await client.from(tableName).delete().match({'id': item.entityId});
           }
-
-          await _db.deleteSyncQueueItem(item.id);
-        } catch (err) {
-          await _db.updateSyncQueueStatus(item.id, 'FAILED', error: err.toString());
-          state = state.copyWith(errorMessage: err.toString());
+          await _db.updateSyncQueueStatus(item.id, 'SYNCED');
+        } catch (itemError) {
+          await _db.updateSyncQueueStatus(item.id, 'FAILED');
         }
       }
 
       final remaining = await _db.getPendingSyncQueue();
+      if (!mounted) return;
       state = state.copyWith(
         isSyncing: false,
         pendingCount: remaining.length,
@@ -132,6 +155,7 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
         clearError: remaining.isEmpty,
       );
     } catch (e) {
+      if (!mounted) return;
       state = state.copyWith(
         isSyncing: false,
         errorMessage: e.toString(),
@@ -337,6 +361,74 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
         }
       } catch (_) {}
 
+      // 9. Activity Logs
+      try {
+        final logs = await client
+            .from('activity_logs')
+            .select()
+            .order('created_at', ascending: false);
+        for (final a in logs) {
+          await _db.into(_db.localActivityLogs).insertOnConflictUpdate(
+                LocalActivityLogsCompanion(
+                  id: Value(a['id'] as String),
+                  transportId: Value(a['transport_id'] as String?),
+                  userId: Value(a['user_id'] as String?),
+                  action: Value((a['action'] ?? a['title'] ?? '') as String),
+                  description: Value((a['description'] ?? '') as String),
+                  createdAt: Value(DateTime.parse(
+                      (a['created_at'] ?? a['timestamp']) as String)),
+                ),
+              );
+          totalRestored++;
+        }
+      } catch (_) {}
+
+      // 10. Notification Logs
+      try {
+        final notifs = await client
+            .from('notification_logs')
+            .select()
+            .order('sent_at', ascending: false);
+        for (final n in notifs) {
+          await _db.into(_db.localNotificationLogs).insertOnConflictUpdate(
+                LocalNotificationLogsCompanion(
+                  id: Value(n['id'] as String),
+                  transportId: Value((n['transport_id'] ?? '') as String),
+                  recipientName: Value((n['recipient_name'] ?? '') as String),
+                  recipientMobile: Value(
+                      (n['recipient_mobile'] ?? n['recipient_phone'] ?? '') as String),
+                  channel: Value((n['channel'] ?? '') as String),
+                  messageBody: Value(
+                      (n['message_body'] ?? n['message'] ?? '') as String),
+                  status: Value((n['status'] ?? '') as String),
+                  sentAt: Value(DateTime.parse(n['sent_at'] as String)),
+                ),
+              );
+          totalRestored++;
+        }
+      } catch (_) {}
+
+      // 11. Transport Allocations
+      try {
+        final allocs = await client.from('transport_allocations').select();
+        for (final a in allocs) {
+          await _db.into(_db.localTransportAllocations).insertOnConflictUpdate(
+                LocalTransportAllocationsCompanion(
+                  id: Value(a['id'] as String),
+                  transportId: Value(a['transport_id'] as String),
+                  slotIndex: Value((a['slot_index'] as num).toInt()),
+                  vehicleId: Value(a['vehicle_id'] as String),
+                  vehicleNumber: Value(a['vehicle_number'] as String),
+                  driverId: Value(a['driver_id'] as String?),
+                  driverName: Value(a['driver_name'] as String?),
+                  driverMobile: Value(a['driver_mobile'] as String?),
+                  assignedAt: Value(DateTime.parse(a['assigned_at'] as String)),
+                ),
+              );
+          totalRestored++;
+        }
+      } catch (_) {}
+
       state = state.copyWith(
         isSyncing: false,
         lastSyncedAt: DateTime.now(),
@@ -352,6 +444,7 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
     final clean = Map<String, dynamic>.from(payload);
     if (tableName == 'transports') {
       clean.remove('party_mobile');
+      clean.remove('allocations');
     } else if (tableName == 'vehicle_assignments') {
       clean.remove('assigned_by');
       clean.remove('is_active');
@@ -413,6 +506,8 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
         return 'ports_cfs';
       case 'transport':
         return 'transports';
+      case 'transport_allocation':
+        return 'transport_allocations';
       case 'status_history':
         return 'transport_status_history';
       case 'vehicle_assignment':

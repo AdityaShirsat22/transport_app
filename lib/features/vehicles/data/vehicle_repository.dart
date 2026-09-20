@@ -12,20 +12,35 @@ abstract class VehicleRepository {
   Vehicle? getByNumber(String vehicleNumber);
   void add(Vehicle vehicle);
   void update(Vehicle vehicle);
-  void updateStatus(String vehicleId, VehicleStatus status, {String? driverId, String? driverName});
+  void updateStatus(String vehicleId, VehicleStatus status, {String? driverId, String? driverName, bool clearDriver = false});
   void delete(String id);
   Future<void> reloadFromDatabase();
+  void addListener(void Function() listener);
+  void removeListener(void Function() listener);
 }
 
 class ProductionVehicleRepository implements VehicleRepository {
   final AppDatabase _db;
   final List<Vehicle> _vehicles = [];
+  final List<void Function()> _listeners = [];
   final Completer<void> _initCompleter = Completer<void>();
 
   Future<void> get initialized => _initCompleter.future;
 
   ProductionVehicleRepository(this._db) {
     _init();
+  }
+
+  @override
+  void addListener(void Function() listener) => _listeners.add(listener);
+
+  @override
+  void removeListener(void Function() listener) => _listeners.remove(listener);
+
+  void _notifyListeners() {
+    for (final l in List<void Function()>.from(_listeners)) {
+      l();
+    }
   }
 
   Future<void> _init() async {
@@ -63,6 +78,7 @@ class ProductionVehicleRepository implements VehicleRepository {
           );
         }
       }
+      _notifyListeners();
     } catch (_) {
       // Safe fallback
     }
@@ -96,6 +112,7 @@ class ProductionVehicleRepository implements VehicleRepository {
     _vehicles.insert(0, vehicle);
     _persistToDb(vehicle);
     _enqueueSync(vehicle, 'CREATE');
+    _notifyListeners();
   }
 
   @override
@@ -105,21 +122,25 @@ class ProductionVehicleRepository implements VehicleRepository {
       _vehicles[index] = vehicle;
       _persistToDb(vehicle);
       _enqueueSync(vehicle, 'UPDATE');
+      _notifyListeners();
     }
   }
 
   @override
-  void updateStatus(String vehicleId, VehicleStatus status, {String? driverId, String? driverName}) {
+  void updateStatus(String vehicleId, VehicleStatus status, {String? driverId, String? driverName, bool clearDriver = false}) {
     final index = _vehicles.indexWhere((v) => v.id == vehicleId);
     if (index != -1) {
+      final shouldClear = clearDriver || (status == VehicleStatus.available && driverId == null);
       final updated = _vehicles[index].copyWith(
         status: status,
         assignedDriverId: driverId,
         assignedDriverName: driverName,
+        clearAssignedDriver: shouldClear,
       );
       _vehicles[index] = updated;
       _persistToDb(updated);
       _enqueueSync(updated, 'UPDATE');
+      _notifyListeners();
     }
   }
 
@@ -130,6 +151,7 @@ class ProductionVehicleRepository implements VehicleRepository {
       _vehicles.removeAt(index);
       _deleteFromDb(id);
       _enqueueSyncDelete(id);
+      _notifyListeners();
     }
   }
 

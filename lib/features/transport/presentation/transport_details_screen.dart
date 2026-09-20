@@ -1,11 +1,9 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../core/enums/transport_status.dart';
-import '../../../core/services/pod_service.dart';
 import '../../../core/utils/date_formatter.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_card.dart';
@@ -13,10 +11,14 @@ import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/responsive_layout.dart';
 import '../../../core/widgets/status_badge.dart';
 import '../domain/activity_log.dart';
+import '../domain/transport_allocation.dart';
 import '../domain/transport_model.dart';
 import 'notification_preview_dialog.dart';
 import 'reassign_dialog.dart';
 import 'transport_view_model.dart';
+import '../../../core/widgets/searchable_select_dialog.dart';
+import '../../drivers/presentation/driver_view_model.dart';
+import '../../vehicles/presentation/vehicle_view_model.dart';
 
 class TransportDetailsScreen extends ConsumerWidget {
   final String transportId;
@@ -91,142 +93,6 @@ class TransportDetailsScreen extends ConsumerWidget {
                     ),
                   ),
                 ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showUploadPodSheet(BuildContext context, WidgetRef ref, Transport transport) {
-    String docType = 'PDF';
-    final cntrDoc = transport.containerNumber.isNotEmpty ? transport.containerNumber : transport.bookingNumber;
-    final ctrl = TextEditingController(text: 'POD_${cntrDoc}_Signed.pdf');
-    File? pickedFile;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (sheetCtx) => StatefulBuilder(
-        builder: (sheetInnerCtx, setSheetState) => Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 16,
-            bottom: MediaQuery.of(sheetInnerCtx).viewInsets.bottom + 24,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text('Upload Proof of Delivery (POD)', style: AppTextStyles.headingSmall, overflow: TextOverflow.ellipsis),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 20),
-                    onPressed: () => Navigator.of(sheetCtx).pop(),
-                  ),
-                ],
-              ),
-              const Divider(height: 16),
-              const SizedBox(height: 6),
-              Text('Attach verified delivery slip or signed gate pass:', style: AppTextStyles.bodySmall),
-              const SizedBox(height: 14),
-              // File Picker Button
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size(double.infinity, 44),
-                ),
-                icon: const Icon(Icons.folder_open, size: 20),
-                label: Text(
-                  pickedFile != null
-                      ? 'Selected: ${pickedFile!.path.split(Platform.pathSeparator).last}'
-                      : 'Choose Document from Device (PDF / Image)',
-                  overflow: TextOverflow.ellipsis,
-                ),
-                onPressed: () async {
-                  final file = await ref.read(podServiceProvider).pickPodFile();
-                  if (file != null) {
-                    setSheetState(() {
-                      pickedFile = file;
-                      final name = file.path.split(Platform.pathSeparator).last;
-                      ctrl.text = name;
-                      docType = name.toLowerCase().endsWith('.pdf') ? 'PDF' : 'IMAGE';
-                    });
-                  }
-                },
-              ),
-              const SizedBox(height: 14),
-              Row(
-                children: [
-                  ChoiceChip(
-                    label: const Text('PDF Document'),
-                    selected: docType == 'PDF',
-                    onSelected: (val) {
-                      setSheetState(() {
-                        docType = 'PDF';
-                        ctrl.text = 'POD_${cntrDoc}_Signed.pdf';
-                      });
-                    },
-                  ),
-                  const SizedBox(width: 10),
-                  ChoiceChip(
-                    label: const Text('Camera Photo / Scan'),
-                    selected: docType == 'IMAGE',
-                    onSelected: (val) {
-                      setSheetState(() {
-                        docType = 'IMAGE';
-                        ctrl.text = 'POD_${cntrDoc}_Photo.jpg';
-                      });
-                    },
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: ctrl,
-                decoration: InputDecoration(
-                  labelText: 'Document Reference / Filename',
-                  prefixIcon: Icon(docType == 'PDF' ? Icons.picture_as_pdf : Icons.camera_alt, size: 18),
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.cloud_upload_outlined),
-                  label: const Text('Upload & Confirm POD'),
-                  onPressed: () async {
-                    Navigator.of(sheetCtx).pop();
-                    if (pickedFile != null) {
-                      await ref.read(podServiceProvider).processPodUpload(
-                            transportId: transport.id,
-                            file: pickedFile!,
-                          );
-                      ref.read(transportViewModelProvider.notifier).loadTransports();
-                    } else {
-                      ref.read(transportViewModelProvider.notifier).uploadPod(
-                            transportId: transport.id,
-                            fileName: ctrl.text.trim(),
-                            fileType: docType,
-                            fileSize: 1024 * 350,
-                          );
-                    }
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('POD successfully verified, stored, and attached!'),
-                          backgroundColor: AppColors.green,
-                        ),
-                      );
-                    }
-                  },
-                ),
               ),
             ],
           ),
@@ -378,23 +244,36 @@ class TransportDetailsScreen extends ConsumerWidget {
                   color: AppColors.greenLight,
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.verified, color: AppColors.green, size: 22),
-                    SizedBox(width: 10),
+                    const Icon(Icons.verified, color: AppColors.green, size: 22),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
-                        'POD has been received and verified. Completing this trip will automatically release the assigned vehicle and driver back to AVAILABLE.',
-                        style: TextStyle(fontSize: 12, color: AppColors.primary),
+                        transport.hasPod
+                            ? 'POD is attached. Completing this trip will finalize operations and release the assigned fleet and crew back to AVAILABLE.'
+                            : 'Completing this trip will finalize operations and release the assigned fleet and crew back to AVAILABLE.',
+                        style: const TextStyle(fontSize: 12, color: AppColors.primary),
                       ),
                     ),
                   ],
                 ),
               ),
               const SizedBox(height: 16),
-              Text('Vehicle: ${transport.vehicleNumber ?? "None"} → AVAILABLE', style: AppTextStyles.bodyMedium),
-              const SizedBox(height: 4),
-              Text('Driver: ${transport.driverName ?? "None"} → AVAILABLE', style: AppTextStyles.bodyMedium),
+              if (transport.allocations.isNotEmpty) ...[
+                for (final alloc in transport.allocations)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Text(
+                      'Vehicle: ${alloc.vehicleNumber}${alloc.driverName != null ? " • Driver: ${alloc.driverName}" : ""} → AVAILABLE',
+                      style: AppTextStyles.bodyMedium,
+                    ),
+                  ),
+              ] else ...[
+                Text('Vehicle: ${transport.vehicleNumber ?? "None"} → AVAILABLE', style: AppTextStyles.bodyMedium),
+                const SizedBox(height: 4),
+                Text('Driver: ${transport.driverName ?? "None"} → AVAILABLE', style: AppTextStyles.bodyMedium),
+              ],
               const SizedBox(height: 24),
               Row(
                 children: [
@@ -531,7 +410,9 @@ class TransportDetailsScreen extends ConsumerWidget {
             (stage == TransportStatus.bookingCreated && log.title.contains('Booking Created')) ||
             (stage == TransportStatus.vehicleAssigned && log.title.contains('Vehicle Assigned')) ||
             (stage == TransportStatus.driverAssigned && log.title.contains('Driver Assigned')) ||
-            (stage == TransportStatus.podReceived && log.title.contains('POD Uploaded')) ||
+            (stage == TransportStatus.containerPickedUp && log.title.contains('Container Picked Up')) ||
+            (stage == TransportStatus.atPortCfs && log.title.contains('Port / CFS')) ||
+            (stage == TransportStatus.podReceived && log.title.contains('POD')) ||
             (stage == TransportStatus.completed && log.title.contains('Transport Completed'))) {
           return idx;
         }
@@ -547,15 +428,14 @@ class TransportDetailsScreen extends ConsumerWidget {
     if (stage == TransportStatus.completed && transport.completionDate != null) {
       return transport.completionDate;
     }
-    if (stage == TransportStatus.podReceived && transport.pod != null) {
-      return transport.pod!.uploadedAt;
-    }
     for (final log in logs) {
       if (log.title.contains(stage.label) ||
           (stage == TransportStatus.bookingCreated && log.title.contains('Booking Created')) ||
           (stage == TransportStatus.vehicleAssigned && log.title.contains('Vehicle Assigned')) ||
           (stage == TransportStatus.driverAssigned && log.title.contains('Driver Assigned')) ||
-          (stage == TransportStatus.podReceived && log.title.contains('POD Uploaded')) ||
+          (stage == TransportStatus.containerPickedUp && log.title.contains('Container Picked Up')) ||
+          (stage == TransportStatus.atPortCfs && log.title.contains('Port / CFS')) ||
+          (stage == TransportStatus.podReceived && log.title.contains('POD')) ||
           (stage == TransportStatus.completed && log.title.contains('Transport Completed'))) {
         return log.timestamp;
       }
@@ -567,7 +447,7 @@ class TransportDetailsScreen extends ConsumerWidget {
     final stages = TransportStatus.sequence;
     TransportStatus resumeTarget = (lastSequentialIndex >= 0 && lastSequentialIndex < stages.length - 1)
         ? stages[lastSequentialIndex]
-        : TransportStatus.inTransit;
+        : TransportStatus.atPortCfs;
 
     final notesCtrl = TextEditingController(text: 'Incident resolved. Resuming transport workflow.');
 
@@ -673,6 +553,216 @@ class TransportDetailsScreen extends ConsumerWidget {
     );
   }
 
+  void _showAddAllocationSheet(BuildContext context, WidgetRef ref, Transport transport) {
+    if (transport.allocations.length >= 5) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Maximum 5 allotments allowed per booking'),
+          backgroundColor: AppColors.amber,
+        ),
+      );
+      return;
+    }
+
+    String? selectedVehicleId;
+    String? selectedVehicleNumber;
+    String? selectedDriverId;
+    String? selectedDriverName;
+    String? selectedDriverMobile;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final vehicleState = ref.watch(vehicleViewModelProvider);
+          final driverState = ref.watch(driverViewModelProvider);
+
+          // Exclude vehicles already allotted to this transport
+          final alreadyAllottedVehicles = transport.allocations.map((a) => a.vehicleId).toSet();
+          final availableVehicles = vehicleState.vehicles
+              .where((v) =>
+                  !alreadyAllottedVehicles.contains(v.id) &&
+                  v.isAvailable &&
+                  v.canCarry(transport.containerSize.code))
+              .toList();
+
+          // Exclude drivers already allotted to this transport
+          final alreadyAllottedDrivers = transport.allocations.map((a) => a.driverId).whereType<String>().toSet();
+          final availableDrivers = driverState.drivers
+              .where((d) => !alreadyAllottedDrivers.contains(d.id) && d.isAvailable)
+              .toList();
+
+          return SafeArea(
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 16,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Add Allotment (Slot #${transport.allocations.length + 1})',
+                          style: AppTextStyles.headingSmall,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 20),
+                        onPressed: () => Navigator.of(sheetCtx).pop(),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 16),
+                  const SizedBox(height: 8),
+                  SearchableSelectField<String>(
+                    label: 'Vehicle (Required)',
+                    hint: 'Select available vehicle',
+                    value: selectedVehicleId,
+                    selectedDisplay: selectedVehicleNumber,
+                    isRequired: true,
+                    items: availableVehicles.map((v) {
+                      return SearchableSelectItem(
+                        value: v.id,
+                        title: v.vehicleNumber,
+                        subtitle: '${v.vehicleType} • ${v.capacity} • ${v.status.label}',
+                      );
+                    }).toList(),
+                    onSelected: (id) {
+                      final v = availableVehicles.firstWhere((x) => x.id == id);
+                      setSheetState(() {
+                        selectedVehicleId = id;
+                        selectedVehicleNumber = v.vehicleNumber;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 14),
+                  SearchableSelectField<String>(
+                    label: 'Driver (Optional)',
+                    hint: 'Select driver (or leave empty)',
+                    value: selectedDriverId,
+                    selectedDisplay: selectedDriverName,
+                    isRequired: false,
+                    items: availableDrivers.map((d) {
+                      return SearchableSelectItem(
+                        value: d.id,
+                        title: d.name,
+                        subtitle: '${d.mobileNumber} • ${d.status.label}',
+                      );
+                    }).toList(),
+                    onSelected: (id) {
+                      final d = availableDrivers.firstWhere((x) => x.id == id);
+                      setSheetState(() {
+                        selectedDriverId = id;
+                        selectedDriverName = d.name;
+                        selectedDriverMobile = d.mobileNumber;
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 24),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(sheetCtx).pop(),
+                          child: const Text('Cancel'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: selectedVehicleId == null
+                              ? null
+                              : () async {
+                                  Navigator.of(sheetCtx).pop();
+                                  await ref
+                                      .read(transportViewModelProvider.notifier)
+                                      .addAllocationToTransport(
+                                        transportId: transport.id,
+                                        vehicleId: selectedVehicleId!,
+                                        vehicleNumber: selectedVehicleNumber!,
+                                        driverId: selectedDriverId,
+                                        driverName: selectedDriverName,
+                                        driverMobile: selectedDriverMobile,
+                                      );
+                                  if (!context.mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                          'Added vehicle $selectedVehicleNumber to transport #${transport.id}'),
+                                      backgroundColor: AppColors.green,
+                                    ),
+                                  );
+                                },
+                          child: const Text('Confirm Allotment'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _confirmRemoveAllocation(
+    BuildContext context,
+    WidgetRef ref,
+    Transport transport,
+    TransportAllocation alloc,
+  ) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove Allotment'),
+        content: Text(
+          'Remove vehicle ${alloc.vehicleNumber}${alloc.driverName != null ? " and driver ${alloc.driverName}" : ""} (Slot #${alloc.slotIndex + 1}) from this booking?\n\n'
+          'The vehicle and driver will be released back to AVAILABLE status.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              await ref
+                  .read(transportViewModelProvider.notifier)
+                  .removeAllocationFromTransport(
+                    transportId: transport.id,
+                    allocationId: alloc.id,
+                    vehicleId: alloc.vehicleId,
+                    driverId: alloc.driverId,
+                  );
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text('Removed vehicle ${alloc.vehicleNumber} and released crew'),
+                  backgroundColor: AppColors.green,
+                ),
+              );
+            },
+            child: const Text('Remove Allotment'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final transportState = ref.watch(transportViewModelProvider);
@@ -695,7 +785,7 @@ class TransportDetailsScreen extends ConsumerWidget {
       );
     }
 
-    final activityLogs = ref.watch(transportViewModelProvider.notifier).getActivityLogs(transport.id);
+    final activityLogs = ref.watch(transportViewModelProvider.select((s) => s.getActivityLogsFor(transport.id)));
     final isMobile = ResponsiveLayout.isMobile(context);
 
     final lastSequentialIndex = _resolveLastSequentialIndex(transport, activityLogs);
@@ -707,12 +797,6 @@ class TransportDetailsScreen extends ConsumerWidget {
         text: 'COMPLETE TRANSPORT',
         icon: Icons.check_circle,
         onPressed: () => _showCompleteSheet(context, ref, transport),
-      );
-    } else if (transport.status == TransportStatus.containerDelivered && !transport.hasPod) {
-      bottomActionButton = AppButton(
-        text: 'UPLOAD PROOF OF DELIVERY (POD)',
-        icon: Icons.upload_file,
-        onPressed: () => _showUploadPodSheet(context, ref, transport),
       );
     } else if (transport.status.isException && !transport.status.isCancelled) {
       bottomActionButton = AppButton(
@@ -753,7 +837,6 @@ class TransportDetailsScreen extends ConsumerWidget {
             onSelected: (val) {
               if (val == 'whatsapp') _showNotificationPreview(context, transport);
               if (val == 'reassign') _showReassignSheet(context, transport);
-              if (val == 'pod') _showUploadPodSheet(context, ref, transport);
               if (val == 'exception') _showExceptionSheet(context, ref, transport);
               if (val == 'resolve') _showResumeTripSheet(context, ref, transport, lastSequentialIndex);
               if (val == 'delete') _confirmDeleteTransport(context, ref, transport);
@@ -780,17 +863,6 @@ class TransportDetailsScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-                if (!transport.hasPod)
-                  const PopupMenuItem(
-                    value: 'pod',
-                    child: Row(
-                      children: [
-                        Icon(Icons.upload_file, size: 18, color: AppColors.purple),
-                        SizedBox(width: 10),
-                        Text('Upload POD'),
-                      ],
-                    ),
-                  ),
                 const PopupMenuDivider(),
                 if (transport.status.isException && !transport.status.isCancelled)
                   const PopupMenuItem(
@@ -972,6 +1044,7 @@ class TransportDetailsScreen extends ConsumerWidget {
             const SizedBox(height: 16),
 
             // Assigned Resources
+            // Assigned Fleet & Crew (Multi-Slot Allotments)
             AppCard(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -981,176 +1054,181 @@ class TransportDetailsScreen extends ConsumerWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
-                        child: Text('Assigned Fleet & Crew', style: AppTextStyles.headingSmall, overflow: TextOverflow.ellipsis),
-                      ),
-                      if (transport.status.isActive) ...[
-                        const SizedBox(width: 8),
-                        TextButton(
-                          onPressed: () => _showReassignSheet(context, transport),
-                          child: const Text('Reassign'),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const Divider(height: 16),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: AppColors.blue.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(Icons.local_shipping, color: AppColors.blue, size: 24),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                        child: Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          spacing: 8,
+                          runSpacing: 4,
                           children: [
-                            Text('Vehicle / Truck', style: AppTextStyles.bodySmall),
-                            Text(
-                              transport.vehicleNumber ?? 'PENDING AUTO-ASSIGNMENT',
-                              style: AppTextStyles.labelLarge.copyWith(
-                                color: transport.vehicleNumber != null ? AppColors.textPrimary : AppColors.amber,
-                                fontWeight: FontWeight.bold,
+                            Text('Assigned Fleet & Crew', style: AppTextStyles.headingSmall),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: transport.allocations.isEmpty
+                                    ? AppColors.amber.withValues(alpha: 0.15)
+                                    : AppColors.blue.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '${transport.allocations.length}/5 slots',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                  color: transport.allocations.isEmpty ? AppColors.amber : AppColors.blue,
+                                ),
                               ),
                             ),
                           ],
                         ),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: AppColors.purple.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: const Icon(Icons.person, color: AppColors.purple, size: 24),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text('Driver', style: AppTextStyles.bodySmall),
-                            Text(
-                              transport.driverName ?? 'PENDING ASSIGNMENT',
-                              style: AppTextStyles.labelLarge.copyWith(
-                                color: transport.driverName != null ? AppColors.textPrimary : AppColors.amber,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            if (transport.driverMobile != null)
-                              Text(
-                                transport.driverMobile!,
-                                style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Proof of Delivery (POD) Section
-            AppCard(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text('Proof of Delivery (POD)', style: AppTextStyles.headingSmall, overflow: TextOverflow.ellipsis),
-                      ),
-                      if (!transport.hasPod && transport.status.isActive) ...[
-                        const SizedBox(width: 8),
+                      if (transport.status.isActive && transport.allocations.length < 5) ...[
                         TextButton.icon(
-                          onPressed: () => _showUploadPodSheet(context, ref, transport),
-                          icon: const Icon(Icons.upload, size: 16),
-                          label: const Text('Upload'),
+                          onPressed: () => _showAddAllocationSheet(context, ref, transport),
+                          icon: const Icon(Icons.add, size: 16),
+                          label: const Text('Add Slot'),
                         ),
                       ],
                     ],
                   ),
                   const Divider(height: 16),
-                  if (transport.hasPod) ...[
+                  if (transport.allocations.isEmpty)
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
-                        color: AppColors.greenLight,
+                        color: AppColors.background,
                         borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: AppColors.green.withValues(alpha: 0.3)),
+                        border: Border.all(color: AppColors.border),
                       ),
-                      child: Row(
+                      child: Column(
                         children: [
-                          Icon(
-                            transport.pod!.fileType == 'PDF' ? Icons.picture_as_pdf : Icons.image,
-                            color: AppColors.green,
-                            size: 26,
+                          const Icon(Icons.airport_shuttle_outlined, size: 32, color: AppColors.textSecondary),
+                          const SizedBox(height: 8),
+                          const Text(
+                            'No Vehicle or Driver Allotted Yet',
+                            style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
                           ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
+                          const SizedBox(height: 4),
+                          const Text(
+                            'You can allot up to 5 vehicle & driver pairs to this transport.',
+                            style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                          ),
+                          if (transport.status.isActive) ...[
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              onPressed: () => _showAddAllocationSheet(context, ref, transport),
+                              icon: const Icon(Icons.add, size: 16),
+                              label: const Text('Allot Vehicle & Driver'),
+                            ),
+                          ],
+                        ],
+                      ),
+                    )
+                  else ...[
+                    for (final entry in transport.allocations.asMap().entries) ...[
+                      Container(
+                        margin: EdgeInsets.only(bottom: entry.key == transport.allocations.length - 1 ? 0 : 12),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: AppColors.background,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
                               children: [
-                                const Text(
-                                  'POD Verified & Signed',
-                                  style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.green),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    'Slot #${entry.key + 1}',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'File: ${transport.pod!.fileName}',
-                                  style: const TextStyle(fontSize: 11, color: AppColors.primary),
-                                  overflow: TextOverflow.ellipsis,
+                                const Spacer(),
+                                if (transport.status.isActive)
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.red),
+                                    tooltip: 'Remove slot',
+                                    onPressed: () => _confirmRemoveAllocation(context, ref, transport, entry.value),
+                                    constraints: const BoxConstraints(),
+                                    padding: const EdgeInsets.all(4),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.blue.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(Icons.local_shipping, color: AppColors.blue, size: 20),
                                 ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Attached: ${DateFormatter.formatDateTime(transport.pod!.uploadedAt)}',
-                                  style: TextStyle(fontSize: 10, color: AppColors.textMuted),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Vehicle', style: AppTextStyles.bodySmall),
+                                      Text(
+                                        entry.value.vehicleNumber,
+                                        style: AppTextStyles.labelLarge.copyWith(fontWeight: FontWeight.bold),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ],
                             ),
-                          ),
-                          if (transport.status.isActive) ...[
-                            IconButton(
-                              icon: const Icon(Icons.delete_outline, color: AppColors.red, size: 22),
-                              tooltip: 'Delete POD',
-                              onPressed: () => _confirmDeletePod(context, ref, transport),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.purple.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(Icons.person, color: AppColors.purple, size: 20),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Driver', style: AppTextStyles.bodySmall),
+                                      Text(
+                                        entry.value.driverName ?? 'No driver assigned',
+                                        style: AppTextStyles.labelLarge.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: entry.value.driverName != null ? AppColors.textPrimary : AppColors.textSecondary,
+                                        ),
+                                      ),
+                                      if (entry.value.driverMobile != null)
+                                        Text(
+                                          entry.value.driverMobile!,
+                                          style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
-                        ],
+                        ),
                       ),
-                    ),
-                  ] else
-                    Container(
-                      padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: AppColors.surfaceMuted,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.info_outline, color: AppColors.textMuted, size: 20),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'POD document is required once the shipment is marked DELIVERED to complete and release resources.',
-                              style: AppTextStyles.bodySmall,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    ],
+                  ],
                 ],
               ),
             ),
@@ -1393,48 +1471,6 @@ class TransportDetailsScreen extends ConsumerWidget {
               value,
               style: AppTextStyles.bodyMedium.copyWith(fontWeight: FontWeight.w500),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _confirmDeletePod(BuildContext context, WidgetRef ref, Transport transport) {
-    showDialog(
-      context: context,
-      builder: (dlgCtx) => AlertDialog(
-        title: const Row(
-          children: [
-            Icon(Icons.delete_forever, color: AppColors.red),
-            SizedBox(width: 8),
-            Text('Delete POD Document'),
-          ],
-        ),
-        content: Text(
-          'Are you sure you want to delete "${transport.pod?.fileName}"?\n\nThe transport status will revert to Container Delivered until a new Proof of Delivery is attached.',
-          style: AppTextStyles.bodyMedium,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dlgCtx).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
-            onPressed: () async {
-              Navigator.of(dlgCtx).pop();
-              await ref.read(podServiceProvider).deletePod(transport.id);
-              ref.read(transportViewModelProvider.notifier).loadTransports();
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Proof of Delivery deleted. Transport status updated.'),
-                    backgroundColor: AppColors.amber,
-                  ),
-                );
-              }
-            },
-            child: const Text('Delete POD', style: TextStyle(color: Colors.white)),
           ),
         ],
       ),

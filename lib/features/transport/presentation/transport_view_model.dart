@@ -3,15 +3,21 @@ import '../../../core/enums/container_size.dart';
 import '../../../core/enums/shipment_type.dart';
 import '../../../core/enums/transport_status.dart';
 import '../../../core/services/assignment_service.dart';
+import '../../../core/sync/sync_engine.dart';
 import '../../../core/utils/id_generator.dart';
 import '../data/transport_repository.dart';
 import '../domain/activity_log.dart';
 import '../domain/notification_log.dart';
 import '../domain/pod_document.dart';
+import '../domain/transport_allocation.dart';
 import '../domain/transport_model.dart';
+import '../../drivers/presentation/driver_view_model.dart';
+import '../../vehicles/presentation/vehicle_view_model.dart';
 
 class TransportState {
   final List<Transport> transports;
+  final List<ActivityLog> activityLogs;
+  final List<NotificationLog> notificationLogs;
   final String searchQuery;
   final TransportStatus? statusFilter;
   final ShipmentType? shipmentTypeFilter;
@@ -24,6 +30,8 @@ class TransportState {
 
   const TransportState({
     this.transports = const [],
+    this.activityLogs = const [],
+    this.notificationLogs = const [],
     this.searchQuery = '',
     this.statusFilter,
     this.shipmentTypeFilter,
@@ -34,6 +42,22 @@ class TransportState {
     this.isLoading = false,
     this.errorMessage,
   });
+
+  /// Returns activity logs for a specific transport, sorted newest first.
+  List<ActivityLog> getActivityLogsFor(String transportId) {
+    return activityLogs
+        .where((log) => log.transportId == transportId)
+        .toList()
+      ..sort((a, b) => b.timestamp.compareTo(a.timestamp));
+  }
+
+  /// Returns notification logs for a specific transport, sorted newest first.
+  List<NotificationLog> getNotificationLogsFor(String transportId) {
+    return notificationLogs
+        .where((n) => n.transportId == transportId)
+        .toList()
+      ..sort((a, b) => b.sentAt.compareTo(a.sentAt));
+  }
 
   List<Transport> get filteredTransports {
     return transports.where((t) {
@@ -76,6 +100,8 @@ class TransportState {
 
   TransportState copyWith({
     List<Transport>? transports,
+    List<ActivityLog>? activityLogs,
+    List<NotificationLog>? notificationLogs,
     String? searchQuery,
     TransportStatus? statusFilter,
     ShipmentType? shipmentTypeFilter,
@@ -94,6 +120,8 @@ class TransportState {
   }) {
     return TransportState(
       transports: transports ?? this.transports,
+      activityLogs: activityLogs ?? this.activityLogs,
+      notificationLogs: notificationLogs ?? this.notificationLogs,
       searchQuery: searchQuery ?? this.searchQuery,
       statusFilter: clearStatusFilter ? null : (statusFilter ?? this.statusFilter),
       shipmentTypeFilter: clearShipmentTypeFilter ? null : (shipmentTypeFilter ?? this.shipmentTypeFilter),
@@ -124,21 +152,35 @@ class BookingCreationOutcome {
 class TransportViewModel extends StateNotifier<TransportState> {
   final TransportRepository _repo;
   final AssignmentService _assignmentService;
+  final void Function() _autoSync;
+  final void Function()? onFleetChanged;
 
   TransportViewModel(
     this._repo,
     this._assignmentService,
-  ) : super(const TransportState()) {
-    state = state.copyWith(transports: _repo.getAll());
+    this._autoSync, {
+    this.onFleetChanged,
+  }) : super(const TransportState()) {
+    _refreshState();
     if (_repo is ProductionTransportRepository) {
       _repo.initialized.then((_) {
-        if (mounted) loadTransports();
+        if (mounted) _refreshState();
       });
     }
   }
 
+  void _refreshState() {
+    final all = _repo.getAll();
+    IdGenerator.syncTransportCounter(all.map((t) => t.id));
+    state = state.copyWith(
+      transports: all,
+      activityLogs: List<ActivityLog>.from(_repo.getAllActivityLogs()),
+      notificationLogs: List<NotificationLog>.from(_repo.getAllNotificationLogs()),
+    );
+  }
+
   void loadTransports() {
-    state = state.copyWith(transports: _repo.getAll());
+    _refreshState();
   }
 
   void setSearchQuery(String query) => state = state.copyWith(searchQuery: query);
@@ -156,10 +198,9 @@ class TransportViewModel extends StateNotifier<TransportState> {
       state = date == null ? state.copyWith(clearDateFilter: true) : state.copyWith(dateFilter: date);
 
   Transport? getTransportById(String id) => _repo.getById(id);
-  List<ActivityLog> getActivityLogs(String transportId) => _repo.getActivityLogs(transportId);
-  List<NotificationLog> getNotificationLogs(String transportId) => _repo.getNotificationLogs(transportId);
 
-  /// Create booking with manually selected vehicle and driver
+  /// Create booking — vehicle/driver assignment is optional (supplied as slots).
+  /// Pass an empty list to create a booking without any assigned fleet.
   Future<BookingCreationOutcome> createBooking({
     required ContainerSize containerSize,
     required ShipmentType shipmentType,
@@ -179,16 +220,43 @@ class TransportViewModel extends StateNotifier<TransportState> {
     required String toLocationName,
     required String portCfsId,
     required String portCfsName,
-    required String vehicleId,
-    required String vehicleNumber,
-    required String driverId,
-    required String driverName,
-    required String driverMobile,
+    List<TransportAllocation> allocations = const [],
+    String? vehicleId,
+    String? vehicleNumber,
+    String? driverId,
+    String? driverName,
+    String? driverMobile,
   }) async {
     final now = DateTime.now();
+    IdGenerator.syncTransportCounter(_repo.getAll().map((t) => t.id));
     final transportId = IdGenerator.generateTransportId();
 
-    // Create transport with manually provided vehicle & driver
+    // Map allocations to bind to this transport ID
+    final resolvedAllocations = allocations.map((a) {
+      return a.copyWith(transportId: transportId);
+    }).toList();
+
+    if (resolvedAllocations.isEmpty && vehicleId != null && vehicleNumber != null) {
+      resolvedAllocations.add(
+        TransportAllocation(
+          id: 'alloc-${now.millisecondsSinceEpoch}-0',
+          transportId: transportId,
+          slotIndex: 0,
+          vehicleId: vehicleId,
+          vehicleNumber: vehicleNumber,
+          driverId: driverId,
+          driverName: driverName,
+          driverMobile: driverMobile,
+          assignedAt: now,
+        ),
+      );
+    }
+
+    // Status: NEW if no allocations, DRIVER_ASSIGNED if any allotted
+    final initialStatus = resolvedAllocations.isNotEmpty
+        ? TransportStatus.driverAssigned
+        : TransportStatus.bookingCreated;
+
     final transport = Transport(
       id: transportId,
       bookingNumber: bookingNumber,
@@ -209,17 +277,88 @@ class TransportViewModel extends StateNotifier<TransportState> {
       toLocationName: toLocationName,
       portCfsId: portCfsId,
       portCfsName: portCfsName,
-      vehicleId: vehicleId,
-      vehicleNumber: vehicleNumber,
-      driverId: driverId,
-      driverName: driverName,
-      driverMobile: driverMobile,
-      status: TransportStatus.driverAssigned,
+      allocations: resolvedAllocations,
+      status: initialStatus,
       createdAt: now,
       updatedAt: now,
     );
 
     _repo.add(transport);
+
+    // Persist each allocation and mark vehicles/drivers ON_TRIP
+    for (final alloc in resolvedAllocations) {
+      await _repo.addAllocation(alloc);
+      _assignmentService.assignSpecific(
+        vehicleId: alloc.vehicleId,
+        vehicleNumber: alloc.vehicleNumber,
+        driverId: alloc.driverId,
+        driverName: alloc.driverName,
+        transportId: transportId,
+      );
+    }
+
+    // Audit logs
+    _repo.addActivityLog(
+      ActivityLog(
+        id: 'act-${now.millisecondsSinceEpoch}-1',
+        transportId: transport.id,
+        title: 'Booking Created',
+        description:
+            'Booking $bookingNumber registered${containerNumber.isNotEmpty ? " for container $containerNumber" : ""}',
+        timestamp: now,
+      ),
+    );
+    for (final alloc in resolvedAllocations) {
+      _repo.addActivityLog(
+        ActivityLog(
+          id: 'act-${now.millisecondsSinceEpoch}-alloc-${alloc.slotIndex}',
+          transportId: transport.id,
+          title: 'Vehicle & Driver Assigned (Slot ${alloc.slotIndex + 1})',
+          description:
+              'Vehicle ${alloc.vehicleNumber}${alloc.driverName != null ? " • Driver ${alloc.driverName}" : ""}',
+          timestamp: now,
+        ),
+      );
+    }
+
+    loadTransports();
+    onFleetChanged?.call();
+    _autoSync();
+
+    return BookingCreationOutcome(
+      transport: transport,
+      wasAssigned: resolvedAllocations.isNotEmpty,
+      notificationLog: null,
+    );
+  }
+
+  /// Add a new vehicle+driver allocation slot to an existing transport.
+  Future<void> addAllocationToTransport({
+    required String transportId,
+    required String vehicleId,
+    required String vehicleNumber,
+    String? driverId,
+    String? driverName,
+    String? driverMobile,
+  }) async {
+    final transport = _repo.getById(transportId);
+    if (transport == null) return;
+    if (transport.allocations.length >= 5) return; // max 5 slots
+
+    final slotIndex = transport.allocations.length;
+    final allocation = TransportAllocation(
+      id: 'alloc-${DateTime.now().millisecondsSinceEpoch}-$transportId-$slotIndex',
+      transportId: transportId,
+      slotIndex: slotIndex,
+      vehicleId: vehicleId,
+      vehicleNumber: vehicleNumber,
+      driverId: driverId,
+      driverName: driverName,
+      driverMobile: driverMobile,
+      assignedAt: DateTime.now(),
+    );
+
+    await _repo.addAllocation(allocation);
 
     _assignmentService.assignSpecific(
       vehicleId: vehicleId,
@@ -229,43 +368,62 @@ class TransportViewModel extends StateNotifier<TransportState> {
       transportId: transportId,
     );
 
-    // Audit logs
+    // Update status to DRIVER_ASSIGNED if it was just BOOKING_CREATED
+    if (transport.status == TransportStatus.bookingCreated) {
+      _repo.updateStatus(transportId, TransportStatus.driverAssigned);
+    }
+
     _repo.addActivityLog(
       ActivityLog(
-        id: 'act-${DateTime.now().millisecondsSinceEpoch}-1',
-        transportId: transport.id,
-        title: 'Booking Created',
+        id: 'act-${DateTime.now().millisecondsSinceEpoch}',
+        transportId: transportId,
+        title: 'Vehicle & Driver Assigned (Slot ${slotIndex + 1})',
         description:
-            'Booking $bookingNumber registered${containerNumber.isNotEmpty ? " for container $containerNumber" : ""}',
-        timestamp: now,
-      ),
-    );
-    _repo.addActivityLog(
-      ActivityLog(
-        id: 'act-${DateTime.now().millisecondsSinceEpoch}-2',
-        transportId: transport.id,
-        title: 'Vehicle Assigned',
-        description: 'Vehicle $vehicleNumber assigned manually',
-        timestamp: now,
-      ),
-    );
-    _repo.addActivityLog(
-      ActivityLog(
-        id: 'act-${DateTime.now().millisecondsSinceEpoch}-3',
-        transportId: transport.id,
-        title: 'Driver Assigned',
-        description: 'Driver $driverName ($driverMobile) assigned manually',
-        timestamp: now,
+            'Vehicle $vehicleNumber${driverName != null ? " • Driver $driverName" : ""}',
+        timestamp: DateTime.now(),
       ),
     );
 
     loadTransports();
+    onFleetChanged?.call();
+    _autoSync();
+  }
 
-    return BookingCreationOutcome(
-      transport: transport,
-      wasAssigned: true,
-      notificationLog: null,
+  /// Remove a vehicle+driver allocation slot from a transport.
+  Future<void> removeAllocationFromTransport({
+    required String transportId,
+    required String allocationId,
+    required String vehicleId,
+    String? driverId,
+  }) async {
+    await _repo.removeAllocation(allocationId);
+
+    // Release vehicle and driver back to AVAILABLE
+    _assignmentService.releaseVehicle(vehicleId, transportId: transportId);
+    if (driverId != null && driverId.isNotEmpty) {
+      _assignmentService.releaseDriver(driverId, transportId: transportId);
+    }
+
+    // If no allocations remain, revert to BOOKING_CREATED
+    final updated = _repo.getById(transportId);
+    if (updated != null && updated.allocations.isEmpty &&
+        updated.status == TransportStatus.driverAssigned) {
+      _repo.updateStatus(transportId, TransportStatus.bookingCreated);
+    }
+
+    _repo.addActivityLog(
+      ActivityLog(
+        id: 'act-${DateTime.now().millisecondsSinceEpoch}',
+        transportId: transportId,
+        title: 'Allocation Removed',
+        description: 'Vehicle $vehicleId slot removed. Resources released to AVAILABLE.',
+        timestamp: DateTime.now(),
+      ),
     );
+
+    loadTransports();
+    onFleetChanged?.call();
+    _autoSync();
   }
 
   /// Update status sequentially or with an exception
@@ -277,13 +435,30 @@ class TransportViewModel extends StateNotifier<TransportState> {
 
     // If cancelled, release vehicle and driver
     if (newStatus == TransportStatus.cancelled) {
-      _assignmentService.releaseVehicle(current.vehicleId, transportId: transportId);
-      _assignmentService.releaseDriver(current.driverId, transportId: transportId);
+      for (final alloc in current.allocations) {
+        _assignmentService.releaseVehicle(alloc.vehicleId, transportId: transportId);
+        if (alloc.driverId != null && alloc.driverId!.isNotEmpty) {
+          _assignmentService.releaseDriver(alloc.driverId, transportId: transportId);
+        }
+      }
+      if (current.vehicleId != null) {
+        _assignmentService.releaseVehicle(current.vehicleId, transportId: transportId);
+      }
+      if (current.driverId != null) {
+        _assignmentService.releaseDriver(current.driverId, transportId: transportId);
+      }
+      onFleetChanged?.call();
     }
 
     // If vehicle breakdown, release vehicle so it can be serviced
     if (newStatus == TransportStatus.vehicleBreakdown) {
-      _assignmentService.releaseVehicle(current.vehicleId, transportId: transportId);
+      for (final alloc in current.allocations) {
+        _assignmentService.releaseVehicle(alloc.vehicleId, transportId: transportId);
+      }
+      if (current.vehicleId != null) {
+        _assignmentService.releaseVehicle(current.vehicleId, transportId: transportId);
+      }
+      onFleetChanged?.call();
     }
 
     _repo.addActivityLog(
@@ -299,6 +474,7 @@ class TransportViewModel extends StateNotifier<TransportState> {
     );
 
     loadTransports();
+    _autoSync();
   }
 
   /// Upload POD
@@ -328,12 +504,14 @@ class TransportViewModel extends StateNotifier<TransportState> {
     );
 
     loadTransports();
+    _autoSync();
   }
 
   /// Delete POD
   void deletePod(String transportId) {
     _repo.deletePod(transportId);
     loadTransports();
+    _autoSync();
   }
 
   /// Complete transport & release resources
@@ -343,21 +521,33 @@ class TransportViewModel extends StateNotifier<TransportState> {
 
     _repo.completeTransport(transportId);
 
-    // Release vehicle & driver back to AVAILABLE
-    _assignmentService.releaseVehicle(current.vehicleId, transportId: transportId);
-    _assignmentService.releaseDriver(current.driverId, transportId: transportId);
+    // Release vehicle & driver back to AVAILABLE for all allocations
+    for (final alloc in current.allocations) {
+      _assignmentService.releaseVehicle(alloc.vehicleId, transportId: transportId);
+      if (alloc.driverId != null && alloc.driverId!.isNotEmpty) {
+        _assignmentService.releaseDriver(alloc.driverId, transportId: transportId);
+      }
+    }
+    if (current.vehicleId != null) {
+      _assignmentService.releaseVehicle(current.vehicleId, transportId: transportId);
+    }
+    if (current.driverId != null) {
+      _assignmentService.releaseDriver(current.driverId, transportId: transportId);
+    }
 
     _repo.addActivityLog(
       ActivityLog(
         id: 'act-${DateTime.now().millisecondsSinceEpoch}',
         transportId: transportId,
         title: 'Transport Completed',
-        description: 'Trip finished successfully. Vehicle ${current.vehicleNumber ?? ''} & Driver ${current.driverName ?? ''} marked AVAILABLE.',
+        description: 'Trip finished successfully. All assigned vehicles and drivers marked AVAILABLE.',
         timestamp: DateTime.now(),
       ),
     );
 
     loadTransports();
+    onFleetChanged?.call();
+    _autoSync();
   }
 
   /// Reassign vehicle manually
@@ -395,6 +585,8 @@ class TransportViewModel extends StateNotifier<TransportState> {
       );
 
       loadTransports();
+      onFleetChanged?.call();
+      _autoSync();
     }
   }
 
@@ -430,6 +622,8 @@ class TransportViewModel extends StateNotifier<TransportState> {
       );
 
       loadTransports();
+      onFleetChanged?.call();
+      _autoSync();
     }
   }
 
@@ -460,12 +654,19 @@ class TransportViewModel extends StateNotifier<TransportState> {
     );
 
     loadTransports();
+    _autoSync();
   }
 
   /// Delete a transport operation
   void deleteTransport(String id) {
     final current = _repo.getById(id);
     if (current != null) {
+      for (final alloc in current.allocations) {
+        _assignmentService.releaseVehicle(alloc.vehicleId, transportId: id);
+        if (alloc.driverId != null && alloc.driverId!.isNotEmpty) {
+          _assignmentService.releaseDriver(alloc.driverId, transportId: id);
+        }
+      }
       if (current.vehicleId != null) {
         _assignmentService.releaseVehicle(current.vehicleId, transportId: id);
       }
@@ -475,6 +676,8 @@ class TransportViewModel extends StateNotifier<TransportState> {
     }
     _repo.delete(id);
     loadTransports();
+    onFleetChanged?.call();
+    _autoSync();
   }
 }
 
@@ -482,8 +685,14 @@ final transportViewModelProvider =
     StateNotifierProvider<TransportViewModel, TransportState>((ref) {
   final repo = ref.watch(transportRepositoryProvider);
   final assignmentService = ref.watch(assignmentServiceProvider);
+  final sync = ref.read(syncEngineProvider.notifier);
   return TransportViewModel(
     repo,
     assignmentService,
+    () => sync.triggerAutoSync(),
+    onFleetChanged: () {
+      ref.read(vehicleViewModelProvider.notifier).loadVehicles();
+      ref.read(driverViewModelProvider.notifier).loadDrivers();
+    },
   );
 });

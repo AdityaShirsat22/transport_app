@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/enums/vehicle_status.dart';
+import '../../../core/sync/sync_engine.dart';
 import '../data/vehicle_repository.dart';
 import '../domain/vehicle_model.dart';
 
@@ -62,9 +63,23 @@ class VehicleState {
 
 class VehicleViewModel extends StateNotifier<VehicleState> {
   final VehicleRepository _repo;
+  final void Function() _autoSync;
 
-  VehicleViewModel(this._repo) : super(const VehicleState()) {
+  VehicleViewModel(this._repo, this._autoSync) : super(const VehicleState()) {
     loadVehicles();
+    _repo.addListener(_onRepoChanged);
+  }
+
+  void _onRepoChanged() {
+    if (mounted) {
+      loadVehicles();
+    }
+  }
+
+  @override
+  void dispose() {
+    _repo.removeListener(_onRepoChanged);
+    super.dispose();
   }
 
   void loadVehicles() {
@@ -115,18 +130,21 @@ class VehicleViewModel extends StateNotifier<VehicleState> {
 
     _repo.add(newVeh);
     loadVehicles();
+    _autoSync();
     return true;
   }
 
   bool updateVehicle(Vehicle updated) {
     _repo.update(updated);
     loadVehicles();
+    _autoSync();
     return true;
   }
 
   void updateStatus(String id, VehicleStatus status) {
     _repo.updateStatus(id, status);
     loadVehicles();
+    _autoSync();
   }
 
   bool deleteVehicle(String id) {
@@ -137,6 +155,7 @@ class VehicleViewModel extends StateNotifier<VehicleState> {
     }
     _repo.delete(id);
     loadVehicles();
+    _autoSync();
     return true;
   }
 }
@@ -144,5 +163,6 @@ class VehicleViewModel extends StateNotifier<VehicleState> {
 final vehicleViewModelProvider =
     StateNotifierProvider<VehicleViewModel, VehicleState>((ref) {
   final repo = ref.watch(vehicleRepositoryProvider);
-  return VehicleViewModel(repo);
+  final sync = ref.read(syncEngineProvider.notifier);
+  return VehicleViewModel(repo, () => sync.triggerAutoSync());
 });

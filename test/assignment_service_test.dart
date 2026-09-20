@@ -164,5 +164,66 @@ void main() {
       // New vehicle should be on trip
       expect(vehicleRepo.getById(newVeh.id)!.status, equals(VehicleStatus.onTrip));
     });
+
+    test('assignSpecific sets ON_TRIP, assigned driver and vehicle details, and notifies listeners', () {
+      int vehicleListenerCalls = 0;
+      int driverListenerCalls = 0;
+      vehicleRepo.addListener(() => vehicleListenerCalls++);
+      driverRepo.addListener(() => driverListenerCalls++);
+
+      final result = service.assignSpecific(
+        vehicleId: 'test-veh-1',
+        vehicleNumber: 'MH-12-AB-1001',
+        driverId: 'test-drv-1',
+        driverName: 'Ramesh Kumar',
+        transportId: 'test-tr-200',
+      );
+
+      expect(result.isSuccess, isTrue);
+      expect(vehicleListenerCalls, greaterThanOrEqualTo(1));
+      expect(driverListenerCalls, greaterThanOrEqualTo(1));
+
+      // Verify vehicle
+      final veh = vehicleRepo.getById('test-veh-1')!;
+      expect(veh.status, equals(VehicleStatus.onTrip));
+      expect(veh.assignedDriverId, equals('test-drv-1'));
+      expect(veh.assignedDriverName, equals('Ramesh Kumar'));
+
+      // Verify driver
+      final drv = driverRepo.getById('test-drv-1')!;
+      expect(drv.status, equals(DriverStatus.onTrip));
+      expect(drv.currentVehicleId, equals('test-veh-1'));
+      expect(drv.currentVehicleNumber, equals('MH-12-AB-1001'));
+
+      // Now release them
+      service.releaseVehicle('test-veh-1', transportId: 'test-tr-200');
+      service.releaseDriver('test-drv-1', transportId: 'test-tr-200');
+
+      final releasedVeh = vehicleRepo.getById('test-veh-1')!;
+      expect(releasedVeh.status, equals(VehicleStatus.available));
+      expect(releasedVeh.assignedDriverId, isNull);
+      expect(releasedVeh.assignedDriverName, isNull);
+
+      final releasedDrv = driverRepo.getById('test-drv-1')!;
+      expect(releasedDrv.status, equals(DriverStatus.available));
+      expect(releasedDrv.currentVehicleId, isNull);
+      expect(releasedDrv.currentVehicleNumber, isNull);
+    });
+
+    test('assignSpecific without driver marks vehicle ON_TRIP without driver info', () {
+      final result = service.assignSpecific(
+        vehicleId: 'test-veh-2',
+        vehicleNumber: 'MH-12-AB-1002',
+        driverId: null,
+        driverName: null,
+        transportId: 'test-tr-201',
+      );
+
+      expect(result.isSuccess, isTrue);
+      final veh = vehicleRepo.getById('test-veh-2')!;
+      expect(veh.status, equals(VehicleStatus.onTrip));
+      expect(veh.assignedDriverId, isNull);
+      expect(veh.assignedDriverName, isNull);
+    });
   });
 }

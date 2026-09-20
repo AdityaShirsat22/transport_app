@@ -16,6 +16,7 @@ import 'tables/local_pod_documents.dart';
 import 'tables/local_ports_cfs.dart';
 import 'tables/local_shipping_lines.dart';
 import 'tables/local_sync_queue.dart';
+import 'tables/local_transport_allocations.dart';
 import 'tables/local_transport_status_history.dart';
 import 'tables/local_transports.dart';
 import 'tables/local_vehicle_assignments.dart';
@@ -38,6 +39,7 @@ part 'app_database.g.dart';
   LocalPodDocuments,
   LocalActivityLogs,
   LocalSyncQueue,
+  LocalTransportAllocations,
 ])
 class AppDatabase extends _$AppDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _openConnection());
@@ -45,7 +47,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -57,11 +59,31 @@ class AppDatabase extends _$AppDatabase {
         },
         beforeOpen: (details) async {
           await customStatement('PRAGMA foreign_keys = OFF;');
+          // v1 migration: add party_mobile column if missing
           try {
             await customStatement('ALTER TABLE local_transports ADD COLUMN party_mobile TEXT;');
-          } catch (_) {
-            // Column already exists or table not yet created
-          }
+          } catch (_) {}
+          // v3 migration: create allocations table if not yet created
+          try {
+            await customStatement(
+              'CREATE TABLE IF NOT EXISTS local_transport_allocations '
+              '(id TEXT NOT NULL PRIMARY KEY, transport_id TEXT NOT NULL, '
+              'slot_index INTEGER NOT NULL, vehicle_id TEXT NOT NULL, '
+              'vehicle_number TEXT NOT NULL, driver_id TEXT, driver_name TEXT, '
+              'driver_mobile TEXT, assigned_at INTEGER NOT NULL);',
+            );
+          } catch (_) {}
+          // Migrate existing transport rows that have a vehicle_id into slot-0 allocations
+          try {
+            await customStatement(
+              'INSERT OR IGNORE INTO local_transport_allocations '
+              '(id, transport_id, slot_index, vehicle_id, vehicle_number, '
+              'driver_id, driver_name, driver_mobile, assigned_at) '
+              'SELECT "alloc-" || id, id, 0, vehicle_id, vehicle_number, '
+              'driver_id, driver_name, driver_mobile, created_at '
+              'FROM local_transports WHERE vehicle_id IS NOT NULL AND vehicle_id != \'\';',
+            );
+          } catch (_) {}
         },
       );
 

@@ -9,6 +9,7 @@ import '../../../core/enums/transport_status.dart';
 import '../domain/activity_log.dart';
 import '../domain/notification_log.dart';
 import '../domain/pod_document.dart';
+import '../domain/transport_allocation.dart';
 import '../domain/transport_model.dart';
 
 abstract class TransportRepository {
@@ -25,10 +26,12 @@ abstract class TransportRepository {
   void delete(String id);
 
   // Activity logs
+  List<ActivityLog> getAllActivityLogs();
   List<ActivityLog> getActivityLogs(String transportId);
   void addActivityLog(ActivityLog log);
 
   // Notifications
+  List<NotificationLog> getAllNotificationLogs();
   List<NotificationLog> getNotificationLogs(String transportId);
   void addNotificationLog(NotificationLog log);
 
@@ -38,6 +41,10 @@ abstract class TransportRepository {
   Future<void> recordDriverAssignment({required String transportId, required String driverId, String assignedBy = 'Super Admin'});
   Future<void> releaseDriverAssignment({required String transportId, required String driverId});
 
+  // Allocations (multi-vehicle/driver per booking)
+  Future<void> addAllocation(TransportAllocation allocation);
+  Future<void> removeAllocation(String allocationId);
+
   Future<void> reloadFromDatabase();
 }
 
@@ -46,6 +53,8 @@ class ProductionTransportRepository implements TransportRepository {
   final List<Transport> _transports = [];
   final List<ActivityLog> _activityLogs = [];
   final List<NotificationLog> _notificationLogs = [];
+  // In-memory allocation list keyed by transportId
+  final Map<String, List<TransportAllocation>> _allocationsMap = {};
   final Completer<void> _initCompleter = Completer<void>();
 
   Future<void> get initialized => _initCompleter.future;
@@ -85,6 +94,29 @@ class ProductionTransportRepository implements TransportRepository {
       }
 
       if (tRows.isNotEmpty) {
+        // Load all allocations grouped by transportId
+        _allocationsMap.clear();
+        try {
+          final allocRows = await (_db.select(_db.localTransportAllocations)
+                ..orderBy([(a) => OrderingTerm.asc(a.slotIndex)]))
+              .get();
+          for (final a in allocRows) {
+            _allocationsMap.putIfAbsent(a.transportId, () => []).add(
+              TransportAllocation(
+                id: a.id,
+                transportId: a.transportId,
+                slotIndex: a.slotIndex,
+                vehicleId: a.vehicleId,
+                vehicleNumber: a.vehicleNumber,
+                driverId: a.driverId,
+                driverName: a.driverName,
+                driverMobile: a.driverMobile,
+                assignedAt: a.assignedAt,
+              ),
+            );
+          }
+        } catch (_) {}
+
         _transports.clear();
         for (final row in tRows) {
           _transports.add(
@@ -108,11 +140,7 @@ class ProductionTransportRepository implements TransportRepository {
               toLocationName: row.toLocationName,
               portCfsId: row.portCfsId,
               portCfsName: row.portCfsName,
-              vehicleId: row.vehicleId,
-              vehicleNumber: row.vehicleNumber,
-              driverId: row.driverId,
-              driverName: row.driverName,
-              driverMobile: row.driverMobile,
+              allocations: _allocationsMap[row.id] ?? const [],
               status: TransportStatus.fromCode(row.status),
               exceptionReason: row.exceptionReason,
               createdAt: row.createdAt,
@@ -215,17 +243,7 @@ class ProductionTransportRepository implements TransportRepository {
 
     // Status history
     _recordStatusHistory(transport.id, transport.status.code, 'Booking Created', 'Super Admin');
-
-    // Activity log
-    addActivityLog(
-      ActivityLog(
-        id: 'act-${DateTime.now().millisecondsSinceEpoch}',
-        transportId: transport.id,
-        title: 'Transport Created',
-        description: 'Booking #${transport.bookingNumber} created for ${transport.partyName}',
-        timestamp: DateTime.now(),
-      ),
-    );
+    // Note: activity log is added by the ViewModel after this call, with more detail
   }
 
   @override
@@ -281,7 +299,6 @@ class ProductionTransportRepository implements TransportRepository {
       final now = DateTime.now();
       final updated = current.copyWith(
         pod: pod,
-        status: TransportStatus.podReceived,
         updatedAt: now,
       );
       _transports[index] = updated;
@@ -291,14 +308,14 @@ class ProductionTransportRepository implements TransportRepository {
       // Persist POD metadata
       _persistPodToDb(transportId, pod);
 
-      _recordStatusHistory(transportId, 'POD_RECEIVED', 'POD document uploaded: ${pod.fileName}', pod.uploadedBy);
+      _recordStatusHistory(transportId, current.status.code, 'POD document attached: ${pod.fileName}', pod.uploadedBy);
 
       addActivityLog(
         ActivityLog(
           id: 'act-${DateTime.now().millisecondsSinceEpoch}',
           transportId: transportId,
-          title: 'POD Uploaded',
-          description: 'Proof of Delivery ${pod.fileName} verified and recorded',
+          title: 'POD Attached',
+          description: 'Proof of Delivery ${pod.fileName} attached manually',
           timestamp: now,
         ),
       );
@@ -313,14 +330,8 @@ class ProductionTransportRepository implements TransportRepository {
       final currentPodName = current.pod?.fileName ?? 'POD Document';
       final now = DateTime.now();
 
-      // If status is podReceived, revert back to containerDelivered
-      final newStatus = current.status == TransportStatus.podReceived
-          ? TransportStatus.containerDelivered
-          : current.status;
-
       final updated = current.copyWith(
         clearPod: true,
-        status: newStatus,
         updatedAt: now,
       );
       _transports[index] = updated;
@@ -329,14 +340,14 @@ class ProductionTransportRepository implements TransportRepository {
 
       _deletePodFromDb(transportId);
 
-      _recordStatusHistory(transportId, newStatus.code, 'POD removed ($currentPodName)', 'Super Admin');
+      _recordStatusHistory(transportId, current.status.code, 'POD removed ($currentPodName)', 'Super Admin');
 
       addActivityLog(
         ActivityLog(
           id: 'act-${DateTime.now().millisecondsSinceEpoch}',
           transportId: transportId,
           title: 'POD Deleted',
-          description: 'Proof of Delivery ($currentPodName) was deleted. Status set to ${newStatus.label}.',
+          description: 'Proof of Delivery ($currentPodName) was removed.',
           timestamp: now,
         ),
       );
@@ -384,6 +395,12 @@ class ProductionTransportRepository implements TransportRepository {
     final index = _transports.indexWhere((t) => t.id == id);
     if (index != -1) {
       final current = _transports[index];
+      for (final alloc in current.allocations) {
+        releaseVehicleAssignment(transportId: id, vehicleId: alloc.vehicleId);
+        if (alloc.driverId != null) {
+          releaseDriverAssignment(transportId: id, driverId: alloc.driverId!);
+        }
+      }
       if (current.vehicleId != null) {
         releaseVehicleAssignment(transportId: id, vehicleId: current.vehicleId!);
       }
@@ -405,6 +422,9 @@ class ProductionTransportRepository implements TransportRepository {
       await (_db.delete(_db.localNotificationLogs)..where((t) => t.transportId.equals(id))).go();
       await (_db.delete(_db.localPodDocuments)..where((t) => t.transportId.equals(id))).go();
       await (_db.delete(_db.localActivityLogs)..where((t) => t.transportId.equals(id))).go();
+      try {
+        await (_db.delete(_db.localTransportAllocations)..where((t) => t.transportId.equals(id))).go();
+      } catch (_) {}
     } catch (_) {}
   }
 
@@ -418,6 +438,111 @@ class ProductionTransportRepository implements TransportRepository {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // ALLOCATION METHODS
+  // ---------------------------------------------------------------------------
+
+  @override
+  Future<void> addAllocation(TransportAllocation allocation) async {
+    // Update in-memory transport
+    final index = _transports.indexWhere((t) => t.id == allocation.transportId);
+    if (index != -1) {
+      final current = _transports[index];
+      final alreadyPresent = current.allocations.any((a) => a.id == allocation.id);
+      if (!alreadyPresent) {
+        final updated = current.copyWith(
+          allocations: [...current.allocations, allocation],
+        );
+        _transports[index] = updated;
+        // Keep legacy single-vehicle columns in sync with slot-0
+        _persistTransportToDb(updated);
+      }
+    }
+    // Persist allocation row
+    await _persistAllocationToDb(allocation);
+    _enqueueSyncAllocation(allocation);
+  }
+
+  @override
+  Future<void> removeAllocation(String allocationId) async {
+    // Find which transport owns this allocation
+    String? transportId;
+    for (final t in _transports) {
+      if (t.allocations.any((a) => a.id == allocationId)) {
+        transportId = t.id;
+        break;
+      }
+    }
+    if (transportId == null) return;
+
+    final index = _transports.indexWhere((t) => t.id == transportId);
+    if (index != -1) {
+      final current = _transports[index];
+      final newAllocs = current.allocations.where((a) => a.id != allocationId).toList();
+      // Re-index slots
+      final reindexed = newAllocs.asMap().entries.map((e) {
+        final a = e.value;
+        return TransportAllocation(
+          id: a.id,
+          transportId: a.transportId,
+          slotIndex: e.key,
+          vehicleId: a.vehicleId,
+          vehicleNumber: a.vehicleNumber,
+          driverId: a.driverId,
+          driverName: a.driverName,
+          driverMobile: a.driverMobile,
+          assignedAt: a.assignedAt,
+        );
+      }).toList();
+      final updated = current.copyWith(allocations: reindexed);
+      _transports[index] = updated;
+      _persistTransportToDb(updated);
+    }
+    // Delete allocation row from DB
+    try {
+      await (_db.delete(_db.localTransportAllocations)..where((t) => t.id.equals(allocationId))).go();
+    } catch (_) {}
+    // Enqueue sync delete for allocation
+    _db.enqueueSync(
+      id: 'sync-alloc-del-${DateTime.now().millisecondsSinceEpoch}',
+      entityType: 'transport_allocation',
+      entityId: allocationId,
+      operation: 'DELETE',
+      payload: jsonEncode({'id': allocationId}),
+    );
+  }
+
+  Future<void> _persistAllocationToDb(TransportAllocation a) async {
+    try {
+      await _db.into(_db.localTransportAllocations).insertOnConflictUpdate(
+        LocalTransportAllocationsCompanion(
+          id: Value(a.id),
+          transportId: Value(a.transportId),
+          slotIndex: Value(a.slotIndex),
+          vehicleId: Value(a.vehicleId),
+          vehicleNumber: Value(a.vehicleNumber),
+          driverId: Value(a.driverId),
+          driverName: Value(a.driverName),
+          driverMobile: Value(a.driverMobile),
+          assignedAt: Value(a.assignedAt),
+        ),
+      );
+    } catch (_) {}
+  }
+
+  void _enqueueSyncAllocation(TransportAllocation a) {
+    _db.enqueueSync(
+      id: 'sync-alloc-${a.id}',
+      entityType: 'transport_allocation',
+      entityId: a.id,
+      operation: 'CREATE',
+      payload: jsonEncode(a.toJson()),
+    );
+  }
+
+  @override
+  List<ActivityLog> getAllActivityLogs() => List.unmodifiable(_activityLogs);
+
   @override
   List<ActivityLog> getActivityLogs(String transportId) {
     return _activityLogs.where((log) => log.transportId == transportId).toList()
@@ -430,6 +555,9 @@ class ProductionTransportRepository implements TransportRepository {
     _persistActivityLogToDb(log);
     _enqueueSyncActivityLog(log);
   }
+
+  @override
+  List<NotificationLog> getAllNotificationLogs() => List.unmodifiable(_notificationLogs);
 
   @override
   List<NotificationLog> getNotificationLogs(String transportId) {

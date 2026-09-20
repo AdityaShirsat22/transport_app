@@ -205,6 +205,16 @@ class SettingsScreen extends ConsumerWidget {
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  Text(
+                    syncState.isOnline
+                        ? '✅ Auto-sync active — data saved while online goes directly to Supabase'
+                        : '⚠️ Offline — ${syncState.pendingCount} operation(s) queued locally',
+                    style: AppTextStyles.bodySmall.copyWith(
+                      color: syncState.isOnline ? AppColors.green : AppColors.amber,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
                   const SizedBox(height: 12),
                   Text('Pending Queue: ${syncState.pendingCount} operations waiting to sync', style: AppTextStyles.bodyMedium),
                   const SizedBox(height: 4),
@@ -226,8 +236,10 @@ class SettingsScreen extends ConsumerWidget {
                     children: [
                       ElevatedButton.icon(
                         icon: const Icon(Icons.sync, size: 18),
-                        label: const Text('Sync Now'),
-                        onPressed: syncState.isSyncing
+                        label: Text(syncState.pendingCount > 0
+                            ? 'Sync Now (${syncState.pendingCount} offline pending)'
+                            : 'Sync Now'),
+                        onPressed: syncState.isSyncing || syncState.pendingCount == 0
                             ? null
                             : () => ref.read(syncEngineProvider.notifier).syncPending(),
                       ),

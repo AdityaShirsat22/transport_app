@@ -8628,6 +8628,595 @@ class LocalSyncQueueCompanion extends UpdateCompanion<LocalSyncQueueData> {
   }
 }
 
+class $LocalTransportAllocationsTable extends LocalTransportAllocations
+    with TableInfo<$LocalTransportAllocationsTable, LocalTransportAllocation> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $LocalTransportAllocationsTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<String> id = GeneratedColumn<String>(
+    'id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _transportIdMeta = const VerificationMeta(
+    'transportId',
+  );
+  @override
+  late final GeneratedColumn<String> transportId = GeneratedColumn<String>(
+    'transport_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _slotIndexMeta = const VerificationMeta(
+    'slotIndex',
+  );
+  @override
+  late final GeneratedColumn<int> slotIndex = GeneratedColumn<int>(
+    'slot_index',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _vehicleIdMeta = const VerificationMeta(
+    'vehicleId',
+  );
+  @override
+  late final GeneratedColumn<String> vehicleId = GeneratedColumn<String>(
+    'vehicle_id',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _vehicleNumberMeta = const VerificationMeta(
+    'vehicleNumber',
+  );
+  @override
+  late final GeneratedColumn<String> vehicleNumber = GeneratedColumn<String>(
+    'vehicle_number',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _driverIdMeta = const VerificationMeta(
+    'driverId',
+  );
+  @override
+  late final GeneratedColumn<String> driverId = GeneratedColumn<String>(
+    'driver_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _driverNameMeta = const VerificationMeta(
+    'driverName',
+  );
+  @override
+  late final GeneratedColumn<String> driverName = GeneratedColumn<String>(
+    'driver_name',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _driverMobileMeta = const VerificationMeta(
+    'driverMobile',
+  );
+  @override
+  late final GeneratedColumn<String> driverMobile = GeneratedColumn<String>(
+    'driver_mobile',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _assignedAtMeta = const VerificationMeta(
+    'assignedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> assignedAt = GeneratedColumn<DateTime>(
+    'assigned_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    transportId,
+    slotIndex,
+    vehicleId,
+    vehicleNumber,
+    driverId,
+    driverName,
+    driverMobile,
+    assignedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'local_transport_allocations';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<LocalTransportAllocation> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    } else if (isInserting) {
+      context.missing(_idMeta);
+    }
+    if (data.containsKey('transport_id')) {
+      context.handle(
+        _transportIdMeta,
+        transportId.isAcceptableOrUnknown(
+          data['transport_id']!,
+          _transportIdMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_transportIdMeta);
+    }
+    if (data.containsKey('slot_index')) {
+      context.handle(
+        _slotIndexMeta,
+        slotIndex.isAcceptableOrUnknown(data['slot_index']!, _slotIndexMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_slotIndexMeta);
+    }
+    if (data.containsKey('vehicle_id')) {
+      context.handle(
+        _vehicleIdMeta,
+        vehicleId.isAcceptableOrUnknown(data['vehicle_id']!, _vehicleIdMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_vehicleIdMeta);
+    }
+    if (data.containsKey('vehicle_number')) {
+      context.handle(
+        _vehicleNumberMeta,
+        vehicleNumber.isAcceptableOrUnknown(
+          data['vehicle_number']!,
+          _vehicleNumberMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_vehicleNumberMeta);
+    }
+    if (data.containsKey('driver_id')) {
+      context.handle(
+        _driverIdMeta,
+        driverId.isAcceptableOrUnknown(data['driver_id']!, _driverIdMeta),
+      );
+    }
+    if (data.containsKey('driver_name')) {
+      context.handle(
+        _driverNameMeta,
+        driverName.isAcceptableOrUnknown(data['driver_name']!, _driverNameMeta),
+      );
+    }
+    if (data.containsKey('driver_mobile')) {
+      context.handle(
+        _driverMobileMeta,
+        driverMobile.isAcceptableOrUnknown(
+          data['driver_mobile']!,
+          _driverMobileMeta,
+        ),
+      );
+    }
+    if (data.containsKey('assigned_at')) {
+      context.handle(
+        _assignedAtMeta,
+        assignedAt.isAcceptableOrUnknown(data['assigned_at']!, _assignedAtMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_assignedAtMeta);
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  LocalTransportAllocation map(
+    Map<String, dynamic> data, {
+    String? tablePrefix,
+  }) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return LocalTransportAllocation(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}id'],
+      )!,
+      transportId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}transport_id'],
+      )!,
+      slotIndex: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}slot_index'],
+      )!,
+      vehicleId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}vehicle_id'],
+      )!,
+      vehicleNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}vehicle_number'],
+      )!,
+      driverId: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}driver_id'],
+      ),
+      driverName: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}driver_name'],
+      ),
+      driverMobile: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}driver_mobile'],
+      ),
+      assignedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}assigned_at'],
+      )!,
+    );
+  }
+
+  @override
+  $LocalTransportAllocationsTable createAlias(String alias) {
+    return $LocalTransportAllocationsTable(attachedDatabase, alias);
+  }
+}
+
+class LocalTransportAllocation extends DataClass
+    implements Insertable<LocalTransportAllocation> {
+  final String id;
+  final String transportId;
+  final int slotIndex;
+  final String vehicleId;
+  final String vehicleNumber;
+  final String? driverId;
+  final String? driverName;
+  final String? driverMobile;
+  final DateTime assignedAt;
+  const LocalTransportAllocation({
+    required this.id,
+    required this.transportId,
+    required this.slotIndex,
+    required this.vehicleId,
+    required this.vehicleNumber,
+    this.driverId,
+    this.driverName,
+    this.driverMobile,
+    required this.assignedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<String>(id);
+    map['transport_id'] = Variable<String>(transportId);
+    map['slot_index'] = Variable<int>(slotIndex);
+    map['vehicle_id'] = Variable<String>(vehicleId);
+    map['vehicle_number'] = Variable<String>(vehicleNumber);
+    if (!nullToAbsent || driverId != null) {
+      map['driver_id'] = Variable<String>(driverId);
+    }
+    if (!nullToAbsent || driverName != null) {
+      map['driver_name'] = Variable<String>(driverName);
+    }
+    if (!nullToAbsent || driverMobile != null) {
+      map['driver_mobile'] = Variable<String>(driverMobile);
+    }
+    map['assigned_at'] = Variable<DateTime>(assignedAt);
+    return map;
+  }
+
+  LocalTransportAllocationsCompanion toCompanion(bool nullToAbsent) {
+    return LocalTransportAllocationsCompanion(
+      id: Value(id),
+      transportId: Value(transportId),
+      slotIndex: Value(slotIndex),
+      vehicleId: Value(vehicleId),
+      vehicleNumber: Value(vehicleNumber),
+      driverId: driverId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(driverId),
+      driverName: driverName == null && nullToAbsent
+          ? const Value.absent()
+          : Value(driverName),
+      driverMobile: driverMobile == null && nullToAbsent
+          ? const Value.absent()
+          : Value(driverMobile),
+      assignedAt: Value(assignedAt),
+    );
+  }
+
+  factory LocalTransportAllocation.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return LocalTransportAllocation(
+      id: serializer.fromJson<String>(json['id']),
+      transportId: serializer.fromJson<String>(json['transportId']),
+      slotIndex: serializer.fromJson<int>(json['slotIndex']),
+      vehicleId: serializer.fromJson<String>(json['vehicleId']),
+      vehicleNumber: serializer.fromJson<String>(json['vehicleNumber']),
+      driverId: serializer.fromJson<String?>(json['driverId']),
+      driverName: serializer.fromJson<String?>(json['driverName']),
+      driverMobile: serializer.fromJson<String?>(json['driverMobile']),
+      assignedAt: serializer.fromJson<DateTime>(json['assignedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<String>(id),
+      'transportId': serializer.toJson<String>(transportId),
+      'slotIndex': serializer.toJson<int>(slotIndex),
+      'vehicleId': serializer.toJson<String>(vehicleId),
+      'vehicleNumber': serializer.toJson<String>(vehicleNumber),
+      'driverId': serializer.toJson<String?>(driverId),
+      'driverName': serializer.toJson<String?>(driverName),
+      'driverMobile': serializer.toJson<String?>(driverMobile),
+      'assignedAt': serializer.toJson<DateTime>(assignedAt),
+    };
+  }
+
+  LocalTransportAllocation copyWith({
+    String? id,
+    String? transportId,
+    int? slotIndex,
+    String? vehicleId,
+    String? vehicleNumber,
+    Value<String?> driverId = const Value.absent(),
+    Value<String?> driverName = const Value.absent(),
+    Value<String?> driverMobile = const Value.absent(),
+    DateTime? assignedAt,
+  }) => LocalTransportAllocation(
+    id: id ?? this.id,
+    transportId: transportId ?? this.transportId,
+    slotIndex: slotIndex ?? this.slotIndex,
+    vehicleId: vehicleId ?? this.vehicleId,
+    vehicleNumber: vehicleNumber ?? this.vehicleNumber,
+    driverId: driverId.present ? driverId.value : this.driverId,
+    driverName: driverName.present ? driverName.value : this.driverName,
+    driverMobile: driverMobile.present ? driverMobile.value : this.driverMobile,
+    assignedAt: assignedAt ?? this.assignedAt,
+  );
+  LocalTransportAllocation copyWithCompanion(
+    LocalTransportAllocationsCompanion data,
+  ) {
+    return LocalTransportAllocation(
+      id: data.id.present ? data.id.value : this.id,
+      transportId: data.transportId.present
+          ? data.transportId.value
+          : this.transportId,
+      slotIndex: data.slotIndex.present ? data.slotIndex.value : this.slotIndex,
+      vehicleId: data.vehicleId.present ? data.vehicleId.value : this.vehicleId,
+      vehicleNumber: data.vehicleNumber.present
+          ? data.vehicleNumber.value
+          : this.vehicleNumber,
+      driverId: data.driverId.present ? data.driverId.value : this.driverId,
+      driverName: data.driverName.present
+          ? data.driverName.value
+          : this.driverName,
+      driverMobile: data.driverMobile.present
+          ? data.driverMobile.value
+          : this.driverMobile,
+      assignedAt: data.assignedAt.present
+          ? data.assignedAt.value
+          : this.assignedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalTransportAllocation(')
+          ..write('id: $id, ')
+          ..write('transportId: $transportId, ')
+          ..write('slotIndex: $slotIndex, ')
+          ..write('vehicleId: $vehicleId, ')
+          ..write('vehicleNumber: $vehicleNumber, ')
+          ..write('driverId: $driverId, ')
+          ..write('driverName: $driverName, ')
+          ..write('driverMobile: $driverMobile, ')
+          ..write('assignedAt: $assignedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    transportId,
+    slotIndex,
+    vehicleId,
+    vehicleNumber,
+    driverId,
+    driverName,
+    driverMobile,
+    assignedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is LocalTransportAllocation &&
+          other.id == this.id &&
+          other.transportId == this.transportId &&
+          other.slotIndex == this.slotIndex &&
+          other.vehicleId == this.vehicleId &&
+          other.vehicleNumber == this.vehicleNumber &&
+          other.driverId == this.driverId &&
+          other.driverName == this.driverName &&
+          other.driverMobile == this.driverMobile &&
+          other.assignedAt == this.assignedAt);
+}
+
+class LocalTransportAllocationsCompanion
+    extends UpdateCompanion<LocalTransportAllocation> {
+  final Value<String> id;
+  final Value<String> transportId;
+  final Value<int> slotIndex;
+  final Value<String> vehicleId;
+  final Value<String> vehicleNumber;
+  final Value<String?> driverId;
+  final Value<String?> driverName;
+  final Value<String?> driverMobile;
+  final Value<DateTime> assignedAt;
+  final Value<int> rowid;
+  const LocalTransportAllocationsCompanion({
+    this.id = const Value.absent(),
+    this.transportId = const Value.absent(),
+    this.slotIndex = const Value.absent(),
+    this.vehicleId = const Value.absent(),
+    this.vehicleNumber = const Value.absent(),
+    this.driverId = const Value.absent(),
+    this.driverName = const Value.absent(),
+    this.driverMobile = const Value.absent(),
+    this.assignedAt = const Value.absent(),
+    this.rowid = const Value.absent(),
+  });
+  LocalTransportAllocationsCompanion.insert({
+    required String id,
+    required String transportId,
+    required int slotIndex,
+    required String vehicleId,
+    required String vehicleNumber,
+    this.driverId = const Value.absent(),
+    this.driverName = const Value.absent(),
+    this.driverMobile = const Value.absent(),
+    required DateTime assignedAt,
+    this.rowid = const Value.absent(),
+  }) : id = Value(id),
+       transportId = Value(transportId),
+       slotIndex = Value(slotIndex),
+       vehicleId = Value(vehicleId),
+       vehicleNumber = Value(vehicleNumber),
+       assignedAt = Value(assignedAt);
+  static Insertable<LocalTransportAllocation> custom({
+    Expression<String>? id,
+    Expression<String>? transportId,
+    Expression<int>? slotIndex,
+    Expression<String>? vehicleId,
+    Expression<String>? vehicleNumber,
+    Expression<String>? driverId,
+    Expression<String>? driverName,
+    Expression<String>? driverMobile,
+    Expression<DateTime>? assignedAt,
+    Expression<int>? rowid,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (transportId != null) 'transport_id': transportId,
+      if (slotIndex != null) 'slot_index': slotIndex,
+      if (vehicleId != null) 'vehicle_id': vehicleId,
+      if (vehicleNumber != null) 'vehicle_number': vehicleNumber,
+      if (driverId != null) 'driver_id': driverId,
+      if (driverName != null) 'driver_name': driverName,
+      if (driverMobile != null) 'driver_mobile': driverMobile,
+      if (assignedAt != null) 'assigned_at': assignedAt,
+      if (rowid != null) 'rowid': rowid,
+    });
+  }
+
+  LocalTransportAllocationsCompanion copyWith({
+    Value<String>? id,
+    Value<String>? transportId,
+    Value<int>? slotIndex,
+    Value<String>? vehicleId,
+    Value<String>? vehicleNumber,
+    Value<String?>? driverId,
+    Value<String?>? driverName,
+    Value<String?>? driverMobile,
+    Value<DateTime>? assignedAt,
+    Value<int>? rowid,
+  }) {
+    return LocalTransportAllocationsCompanion(
+      id: id ?? this.id,
+      transportId: transportId ?? this.transportId,
+      slotIndex: slotIndex ?? this.slotIndex,
+      vehicleId: vehicleId ?? this.vehicleId,
+      vehicleNumber: vehicleNumber ?? this.vehicleNumber,
+      driverId: driverId ?? this.driverId,
+      driverName: driverName ?? this.driverName,
+      driverMobile: driverMobile ?? this.driverMobile,
+      assignedAt: assignedAt ?? this.assignedAt,
+      rowid: rowid ?? this.rowid,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<String>(id.value);
+    }
+    if (transportId.present) {
+      map['transport_id'] = Variable<String>(transportId.value);
+    }
+    if (slotIndex.present) {
+      map['slot_index'] = Variable<int>(slotIndex.value);
+    }
+    if (vehicleId.present) {
+      map['vehicle_id'] = Variable<String>(vehicleId.value);
+    }
+    if (vehicleNumber.present) {
+      map['vehicle_number'] = Variable<String>(vehicleNumber.value);
+    }
+    if (driverId.present) {
+      map['driver_id'] = Variable<String>(driverId.value);
+    }
+    if (driverName.present) {
+      map['driver_name'] = Variable<String>(driverName.value);
+    }
+    if (driverMobile.present) {
+      map['driver_mobile'] = Variable<String>(driverMobile.value);
+    }
+    if (assignedAt.present) {
+      map['assigned_at'] = Variable<DateTime>(assignedAt.value);
+    }
+    if (rowid.present) {
+      map['rowid'] = Variable<int>(rowid.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('LocalTransportAllocationsCompanion(')
+          ..write('id: $id, ')
+          ..write('transportId: $transportId, ')
+          ..write('slotIndex: $slotIndex, ')
+          ..write('vehicleId: $vehicleId, ')
+          ..write('vehicleNumber: $vehicleNumber, ')
+          ..write('driverId: $driverId, ')
+          ..write('driverName: $driverName, ')
+          ..write('driverMobile: $driverMobile, ')
+          ..write('assignedAt: $assignedAt, ')
+          ..write('rowid: $rowid')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$AppDatabase extends GeneratedDatabase {
   _$AppDatabase(QueryExecutor e) : super(e);
   $AppDatabaseManager get managers => $AppDatabaseManager(this);
@@ -8654,6 +9243,8 @@ abstract class _$AppDatabase extends GeneratedDatabase {
   late final $LocalActivityLogsTable localActivityLogs =
       $LocalActivityLogsTable(this);
   late final $LocalSyncQueueTable localSyncQueue = $LocalSyncQueueTable(this);
+  late final $LocalTransportAllocationsTable localTransportAllocations =
+      $LocalTransportAllocationsTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -8673,6 +9264,7 @@ abstract class _$AppDatabase extends GeneratedDatabase {
     localPodDocuments,
     localActivityLogs,
     localSyncQueue,
+    localTransportAllocations,
   ];
 }
 
@@ -13136,6 +13728,323 @@ typedef $$LocalSyncQueueTableProcessedTableManager =
       LocalSyncQueueData,
       PrefetchHooks Function()
     >;
+typedef $$LocalTransportAllocationsTableCreateCompanionBuilder =
+    LocalTransportAllocationsCompanion Function({
+      required String id,
+      required String transportId,
+      required int slotIndex,
+      required String vehicleId,
+      required String vehicleNumber,
+      Value<String?> driverId,
+      Value<String?> driverName,
+      Value<String?> driverMobile,
+      required DateTime assignedAt,
+      Value<int> rowid,
+    });
+typedef $$LocalTransportAllocationsTableUpdateCompanionBuilder =
+    LocalTransportAllocationsCompanion Function({
+      Value<String> id,
+      Value<String> transportId,
+      Value<int> slotIndex,
+      Value<String> vehicleId,
+      Value<String> vehicleNumber,
+      Value<String?> driverId,
+      Value<String?> driverName,
+      Value<String?> driverMobile,
+      Value<DateTime> assignedAt,
+      Value<int> rowid,
+    });
+
+class $$LocalTransportAllocationsTableFilterComposer
+    extends Composer<_$AppDatabase, $LocalTransportAllocationsTable> {
+  $$LocalTransportAllocationsTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get transportId => $composableBuilder(
+    column: $table.transportId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get slotIndex => $composableBuilder(
+    column: $table.slotIndex,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get vehicleId => $composableBuilder(
+    column: $table.vehicleId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get vehicleNumber => $composableBuilder(
+    column: $table.vehicleNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get driverId => $composableBuilder(
+    column: $table.driverId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get driverName => $composableBuilder(
+    column: $table.driverName,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get driverMobile => $composableBuilder(
+    column: $table.driverMobile,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get assignedAt => $composableBuilder(
+    column: $table.assignedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$LocalTransportAllocationsTableOrderingComposer
+    extends Composer<_$AppDatabase, $LocalTransportAllocationsTable> {
+  $$LocalTransportAllocationsTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<String> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get transportId => $composableBuilder(
+    column: $table.transportId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get slotIndex => $composableBuilder(
+    column: $table.slotIndex,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get vehicleId => $composableBuilder(
+    column: $table.vehicleId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get vehicleNumber => $composableBuilder(
+    column: $table.vehicleNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get driverId => $composableBuilder(
+    column: $table.driverId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get driverName => $composableBuilder(
+    column: $table.driverName,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get driverMobile => $composableBuilder(
+    column: $table.driverMobile,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get assignedAt => $composableBuilder(
+    column: $table.assignedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$LocalTransportAllocationsTableAnnotationComposer
+    extends Composer<_$AppDatabase, $LocalTransportAllocationsTable> {
+  $$LocalTransportAllocationsTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<String> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<String> get transportId => $composableBuilder(
+    column: $table.transportId,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get slotIndex =>
+      $composableBuilder(column: $table.slotIndex, builder: (column) => column);
+
+  GeneratedColumn<String> get vehicleId =>
+      $composableBuilder(column: $table.vehicleId, builder: (column) => column);
+
+  GeneratedColumn<String> get vehicleNumber => $composableBuilder(
+    column: $table.vehicleNumber,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get driverId =>
+      $composableBuilder(column: $table.driverId, builder: (column) => column);
+
+  GeneratedColumn<String> get driverName => $composableBuilder(
+    column: $table.driverName,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get driverMobile => $composableBuilder(
+    column: $table.driverMobile,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get assignedAt => $composableBuilder(
+    column: $table.assignedAt,
+    builder: (column) => column,
+  );
+}
+
+class $$LocalTransportAllocationsTableTableManager
+    extends
+        RootTableManager<
+          _$AppDatabase,
+          $LocalTransportAllocationsTable,
+          LocalTransportAllocation,
+          $$LocalTransportAllocationsTableFilterComposer,
+          $$LocalTransportAllocationsTableOrderingComposer,
+          $$LocalTransportAllocationsTableAnnotationComposer,
+          $$LocalTransportAllocationsTableCreateCompanionBuilder,
+          $$LocalTransportAllocationsTableUpdateCompanionBuilder,
+          (
+            LocalTransportAllocation,
+            BaseReferences<
+              _$AppDatabase,
+              $LocalTransportAllocationsTable,
+              LocalTransportAllocation
+            >,
+          ),
+          LocalTransportAllocation,
+          PrefetchHooks Function()
+        > {
+  $$LocalTransportAllocationsTableTableManager(
+    _$AppDatabase db,
+    $LocalTransportAllocationsTable table,
+  ) : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$LocalTransportAllocationsTableFilterComposer(
+                $db: db,
+                $table: table,
+              ),
+          createOrderingComposer: () =>
+              $$LocalTransportAllocationsTableOrderingComposer(
+                $db: db,
+                $table: table,
+              ),
+          createComputedFieldComposer: () =>
+              $$LocalTransportAllocationsTableAnnotationComposer(
+                $db: db,
+                $table: table,
+              ),
+          updateCompanionCallback:
+              ({
+                Value<String> id = const Value.absent(),
+                Value<String> transportId = const Value.absent(),
+                Value<int> slotIndex = const Value.absent(),
+                Value<String> vehicleId = const Value.absent(),
+                Value<String> vehicleNumber = const Value.absent(),
+                Value<String?> driverId = const Value.absent(),
+                Value<String?> driverName = const Value.absent(),
+                Value<String?> driverMobile = const Value.absent(),
+                Value<DateTime> assignedAt = const Value.absent(),
+                Value<int> rowid = const Value.absent(),
+              }) => LocalTransportAllocationsCompanion(
+                id: id,
+                transportId: transportId,
+                slotIndex: slotIndex,
+                vehicleId: vehicleId,
+                vehicleNumber: vehicleNumber,
+                driverId: driverId,
+                driverName: driverName,
+                driverMobile: driverMobile,
+                assignedAt: assignedAt,
+                rowid: rowid,
+              ),
+          createCompanionCallback:
+              ({
+                required String id,
+                required String transportId,
+                required int slotIndex,
+                required String vehicleId,
+                required String vehicleNumber,
+                Value<String?> driverId = const Value.absent(),
+                Value<String?> driverName = const Value.absent(),
+                Value<String?> driverMobile = const Value.absent(),
+                required DateTime assignedAt,
+                Value<int> rowid = const Value.absent(),
+              }) => LocalTransportAllocationsCompanion.insert(
+                id: id,
+                transportId: transportId,
+                slotIndex: slotIndex,
+                vehicleId: vehicleId,
+                vehicleNumber: vehicleNumber,
+                driverId: driverId,
+                driverName: driverName,
+                driverMobile: driverMobile,
+                assignedAt: assignedAt,
+                rowid: rowid,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<
+                    $LocalTransportAllocationsTable,
+                    LocalTransportAllocation
+                  >(table),
+                  BaseReferences<
+                    _$AppDatabase,
+                    $LocalTransportAllocationsTable,
+                    LocalTransportAllocation
+                  >(db, table, e),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$LocalTransportAllocationsTableProcessedTableManager =
+    ProcessedTableManager<
+      _$AppDatabase,
+      $LocalTransportAllocationsTable,
+      LocalTransportAllocation,
+      $$LocalTransportAllocationsTableFilterComposer,
+      $$LocalTransportAllocationsTableOrderingComposer,
+      $$LocalTransportAllocationsTableAnnotationComposer,
+      $$LocalTransportAllocationsTableCreateCompanionBuilder,
+      $$LocalTransportAllocationsTableUpdateCompanionBuilder,
+      (
+        LocalTransportAllocation,
+        BaseReferences<
+          _$AppDatabase,
+          $LocalTransportAllocationsTable,
+          LocalTransportAllocation
+        >,
+      ),
+      LocalTransportAllocation,
+      PrefetchHooks Function()
+    >;
 
 class $AppDatabaseManager {
   final _$AppDatabase _db;
@@ -13178,4 +14087,9 @@ class $AppDatabaseManager {
       $$LocalActivityLogsTableTableManager(_db, _db.localActivityLogs);
   $$LocalSyncQueueTableTableManager get localSyncQueue =>
       $$LocalSyncQueueTableTableManager(_db, _db.localSyncQueue);
+  $$LocalTransportAllocationsTableTableManager get localTransportAllocations =>
+      $$LocalTransportAllocationsTableTableManager(
+        _db,
+        _db.localTransportAllocations,
+      );
 }

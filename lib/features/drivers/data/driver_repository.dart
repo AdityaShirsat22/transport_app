@@ -11,20 +11,35 @@ abstract class DriverRepository {
   Driver? getById(String id);
   void add(Driver driver);
   void update(Driver driver);
-  void updateStatus(String driverId, DriverStatus status, {String? vehicleId, String? vehicleNumber});
+  void updateStatus(String driverId, DriverStatus status, {String? vehicleId, String? vehicleNumber, bool clearVehicle = false});
   void delete(String id);
   Future<void> reloadFromDatabase();
+  void addListener(void Function() listener);
+  void removeListener(void Function() listener);
 }
 
 class ProductionDriverRepository implements DriverRepository {
   final AppDatabase _db;
   final List<Driver> _drivers = [];
+  final List<void Function()> _listeners = [];
   final Completer<void> _initCompleter = Completer<void>();
 
   Future<void> get initialized => _initCompleter.future;
 
   ProductionDriverRepository(this._db) {
     _init();
+  }
+
+  @override
+  void addListener(void Function() listener) => _listeners.add(listener);
+
+  @override
+  void removeListener(void Function() listener) => _listeners.remove(listener);
+
+  void _notifyListeners() {
+    for (final l in List<void Function()>.from(_listeners)) {
+      l();
+    }
   }
 
   Future<void> _init() async {
@@ -61,6 +76,7 @@ class ProductionDriverRepository implements DriverRepository {
           );
         }
       }
+      _notifyListeners();
     } catch (_) {
       // Safe fallback
     }
@@ -83,6 +99,7 @@ class ProductionDriverRepository implements DriverRepository {
     _drivers.insert(0, driver);
     _persistToDb(driver);
     _enqueueSync(driver, 'CREATE');
+    _notifyListeners();
   }
 
   @override
@@ -92,21 +109,25 @@ class ProductionDriverRepository implements DriverRepository {
       _drivers[index] = driver;
       _persistToDb(driver);
       _enqueueSync(driver, 'UPDATE');
+      _notifyListeners();
     }
   }
 
   @override
-  void updateStatus(String driverId, DriverStatus status, {String? vehicleId, String? vehicleNumber}) {
+  void updateStatus(String driverId, DriverStatus status, {String? vehicleId, String? vehicleNumber, bool clearVehicle = false}) {
     final index = _drivers.indexWhere((d) => d.id == driverId);
     if (index != -1) {
+      final shouldClear = clearVehicle || (status == DriverStatus.available && vehicleId == null);
       final updated = _drivers[index].copyWith(
         status: status,
         currentVehicleId: vehicleId,
         currentVehicleNumber: vehicleNumber,
+        clearCurrentVehicle: shouldClear,
       );
       _drivers[index] = updated;
       _persistToDb(updated);
       _enqueueSync(updated, 'UPDATE');
+      _notifyListeners();
     }
   }
 
@@ -117,6 +138,7 @@ class ProductionDriverRepository implements DriverRepository {
       _drivers.removeAt(index);
       _deleteFromDb(id);
       _enqueueSyncDelete(id);
+      _notifyListeners();
     }
   }
 

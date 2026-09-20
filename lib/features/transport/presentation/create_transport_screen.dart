@@ -18,7 +18,18 @@ import '../../parties/presentation/party_view_model.dart';
 import '../../ports_cfs/presentation/port_cfs_view_model.dart';
 import '../../shipping_lines/presentation/shipping_line_view_model.dart';
 import '../../vehicles/presentation/vehicle_view_model.dart';
+import '../domain/transport_allocation.dart';
 import 'transport_view_model.dart';
+
+class _AllotmentSlot {
+  String? vehicleId;
+  String? vehicleNumber;
+  String? driverId;
+  String? driverName;
+  String? driverMobile;
+
+  _AllotmentSlot();
+}
 
 class CreateTransportScreen extends ConsumerStatefulWidget {
   const CreateTransportScreen({super.key});
@@ -30,16 +41,11 @@ class CreateTransportScreen extends ConsumerStatefulWidget {
 class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // Section 1: Container & Assignment Details
+  // Section 1: Container Details
   ContainerSize _containerSize = ContainerSize.size40Ft;
   ShipmentType _shipmentType = ShipmentType.export;
   final _containerNumberCtrl = TextEditingController();
   final _sealNumberCtrl = TextEditingController();
-  String? _vehicleId;
-  String? _vehicleNumber;
-  String? _driverId;
-  String? _driverName;
-  String? _driverMobile;
 
   // Section 2: Booking Details
   String? _partyId;
@@ -58,6 +64,9 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
   String? _toLocationName;
   String? _portCfsId;
   String? _portCfsName;
+
+  // Section 4: Vehicle & Driver Allotment (Optional, 0–5 slots)
+  final List<_AllotmentSlot> _allotments = [];
 
   bool _isSubmitting = false;
 
@@ -114,11 +123,7 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
       _containerNumberCtrl.clear();
       _sealNumberCtrl.clear();
       _bookingNumberCtrl.text = IdGenerator.generateBookingNumber();
-      _vehicleId = null;
-      _vehicleNumber = null;
-      _driverId = null;
-      _driverName = null;
-      _driverMobile = null;
+      _allotments.clear();
       _partyId = null;
       _partyName = null;
       _partyMobile = null;
@@ -146,16 +151,6 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
       return;
     }
 
-    if (_vehicleId == null || _driverId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please select a Vehicle and Driver'),
-          backgroundColor: AppColors.red,
-        ),
-      );
-      return;
-    }
-
     if (_partyId == null || _bookingPartyId == null || _shippingLineId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -176,23 +171,74 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
       return;
     }
 
+    // Validate allotment slots if any were added
+    final selectedVehicleIds = <String>{};
+    final selectedDriverIds = <String>{};
+
+    for (int i = 0; i < _allotments.length; i++) {
+      final slot = _allotments[i];
+      if (slot.vehicleId == null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Please select a Vehicle for Slot #${i + 1} or remove the slot'),
+            backgroundColor: AppColors.red,
+          ),
+        );
+        return;
+      }
+      if (selectedVehicleIds.contains(slot.vehicleId)) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Vehicle ${slot.vehicleNumber} is selected more than once'),
+            backgroundColor: AppColors.red,
+          ),
+        );
+        return;
+      }
+      selectedVehicleIds.add(slot.vehicleId!);
+
+      if (slot.driverId != null && slot.driverId!.isNotEmpty) {
+        if (selectedDriverIds.contains(slot.driverId)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Driver ${slot.driverName} is selected more than once'),
+              backgroundColor: AppColors.red,
+            ),
+          );
+          return;
+        }
+        selectedDriverIds.add(slot.driverId!);
+      }
+    }
+
     // Confirmation dialog
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Confirm Booking'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Please review the booking details before creating:'),
-            const SizedBox(height: 12),
-            _confirmRow('Booking No.', _bookingNumberCtrl.text.trim().toUpperCase()),
-            _confirmRow('Customer', _partyName ?? '-'),
-            _confirmRow('Vehicle', _vehicleNumber ?? '-'),
-            _confirmRow('Driver', _driverName ?? '-'),
-            _confirmRow('Route', '${_fromLocationName ?? '-'} → ${_toLocationName ?? '-'}'),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Please review the booking details before creating:'),
+              const SizedBox(height: 12),
+              _confirmRow('Booking No.', _bookingNumberCtrl.text.trim().toUpperCase()),
+              _confirmRow('Customer', _partyName ?? '-'),
+              _confirmRow('Route', '${_fromLocationName ?? '-'} → ${_toLocationName ?? '-'}'),
+              _confirmRow(
+                'Allotments',
+                _allotments.isEmpty
+                    ? 'None (Can be allotted later)'
+                    : _allotments
+                        .asMap()
+                        .entries
+                        .map((e) =>
+                            'Slot ${e.key + 1}: ${e.value.vehicleNumber ?? "-"} • ${e.value.driverName ?? "No driver"}')
+                        .join('\n'),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -212,6 +258,22 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
     setState(() => _isSubmitting = true);
 
     try {
+      final now = DateTime.now();
+      final builtAllocations = _allotments.asMap().entries.map((e) {
+        final slot = e.value;
+        return TransportAllocation(
+          id: 'alloc-${now.millisecondsSinceEpoch}-${e.key}',
+          transportId: '', // Will be assigned the transport ID
+          slotIndex: e.key,
+          vehicleId: slot.vehicleId!,
+          vehicleNumber: slot.vehicleNumber!,
+          driverId: slot.driverId,
+          driverName: slot.driverName,
+          driverMobile: slot.driverMobile,
+          assignedAt: now,
+        );
+      }).toList();
+
       final outcome = await ref.read(transportViewModelProvider.notifier).createBooking(
             containerSize: _containerSize,
             shipmentType: _shipmentType,
@@ -231,11 +293,7 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
             toLocationName: _toLocationName!,
             portCfsId: _portCfsId!,
             portCfsName: _portCfsName!,
-            vehicleId: _vehicleId!,
-            vehicleNumber: _vehicleNumber!,
-            driverId: _driverId!,
-            driverName: _driverName!,
-            driverMobile: _driverMobile ?? '',
+            allocations: builtAllocations,
           );
 
       if (!mounted) return;
@@ -337,7 +395,9 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Section 1 — Container & Assignment Details
+              // -----------------------------------------------------------------
+              // Section 1 — Container Details
+              // -----------------------------------------------------------------
               AppCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -347,12 +407,14 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
                         const Icon(Icons.inventory_2_outlined, color: AppColors.accent, size: 20),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text('Section 1 — Container & Assignment Details', style: AppTextStyles.headingSmall, overflow: TextOverflow.ellipsis),
+                          child: Text('Section 1 — Container Details',
+                              style: AppTextStyles.headingSmall, overflow: TextOverflow.ellipsis),
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text('Specify container specs, assign vehicle and driver', style: AppTextStyles.bodySmall),
+                    Text('Specify container specifications (numbers can be added now or later)',
+                        style: AppTextStyles.bodySmall),
                     const Divider(height: 20),
                     if (isMobile) ...[
                       AppDropdown<ContainerSize>(
@@ -411,53 +473,6 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
                         ],
                       ),
                     const SizedBox(height: 14),
-                    // Vehicle selector
-                    SearchableSelectField<String>(
-                      label: 'Vehicle',
-                      hint: 'Select vehicle',
-                      value: _vehicleId,
-                      selectedDisplay: _vehicleNumber,
-                      isRequired: true,
-                      items: vehicles.map((v) {
-                        return SearchableSelectItem(
-                          value: v.id,
-                          title: v.vehicleNumber,
-                          subtitle: '${v.vehicleType} • ${v.capacity} • ${v.status.label}',
-                        );
-                      }).toList(),
-                      onSelected: (id) {
-                        final selected = vehicles.firstWhere((v) => v.id == id);
-                        setState(() {
-                          _vehicleId = id;
-                          _vehicleNumber = selected.vehicleNumber;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 14),
-                    // Driver selector
-                    SearchableSelectField<String>(
-                      label: 'Driver',
-                      hint: 'Select driver',
-                      value: _driverId,
-                      selectedDisplay: _driverName,
-                      isRequired: true,
-                      items: drivers.map((d) {
-                        return SearchableSelectItem(
-                          value: d.id,
-                          title: d.name,
-                          subtitle: '${d.mobileNumber} • ${d.status.label}',
-                        );
-                      }).toList(),
-                      onSelected: (id) {
-                        final selected = drivers.firstWhere((d) => d.id == id);
-                        setState(() {
-                          _driverId = id;
-                          _driverName = selected.name;
-                          _driverMobile = selected.mobileNumber;
-                        });
-                      },
-                    ),
-                    const SizedBox(height: 14),
                     AppTextField(
                       label: 'Container Number',
                       hint: 'e.g. MSCU1234567 (Optional)',
@@ -483,7 +498,9 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
               ),
               const SizedBox(height: 16),
 
+              // -----------------------------------------------------------------
               // Section 2 — Booking Details
+              // -----------------------------------------------------------------
               AppCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -493,12 +510,14 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
                         const Icon(Icons.assignment_outlined, color: AppColors.accent, size: 20),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text('Section 2 — Booking Details', style: AppTextStyles.headingSmall, overflow: TextOverflow.ellipsis),
+                          child: Text('Section 2 — Booking Details',
+                              style: AppTextStyles.headingSmall, overflow: TextOverflow.ellipsis),
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text('Select billing party, booking agent, and shipping line', style: AppTextStyles.bodySmall),
+                    Text('Select billing party, booking agent, and shipping line',
+                        style: AppTextStyles.bodySmall),
                     const Divider(height: 20),
                     SearchableSelectField<String>(
                       label: 'Party / Customer Name',
@@ -588,7 +607,9 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
               ),
               const SizedBox(height: 16),
 
+              // -----------------------------------------------------------------
               // Section 3 — Route Details
+              // -----------------------------------------------------------------
               AppCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -598,12 +619,14 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
                         const Icon(Icons.route_outlined, color: AppColors.accent, size: 20),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text('Section 3 — Route & CFS Details', style: AppTextStyles.headingSmall, overflow: TextOverflow.ellipsis),
+                          child: Text('Section 3 — Route & CFS Details',
+                              style: AppTextStyles.headingSmall, overflow: TextOverflow.ellipsis),
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text('Specify origin, destination, and maritime gateway', style: AppTextStyles.bodySmall),
+                    Text('Specify origin, destination, and maritime gateway',
+                        style: AppTextStyles.bodySmall),
                     const Divider(height: 20),
                     SearchableSelectField<String>(
                       label: 'From Location',
@@ -670,6 +693,201 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
                         });
                       },
                     ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // -----------------------------------------------------------------
+              // Section 4 — Vehicle & Driver Allotment (Optional, Up to 5)
+              // -----------------------------------------------------------------
+              AppCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.local_shipping_outlined, color: AppColors.accent, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text('Section 4 — Vehicle & Driver Allotment',
+                              style: AppTextStyles.headingSmall, overflow: TextOverflow.ellipsis),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: _allotments.isEmpty
+                                ? AppColors.blue.withValues(alpha: 0.1)
+                                : AppColors.green.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            'Optional • ${_allotments.length}/5 slots',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: _allotments.isEmpty ? AppColors.blue : AppColors.green,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Assign up to 5 vehicle & driver pairs now, or allot them later from booking details',
+                      style: AppTextStyles.bodySmall,
+                    ),
+                    const Divider(height: 20),
+
+                    if (_allotments.isEmpty)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: AppColors.background,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: AppColors.border),
+                        ),
+                        child: Column(
+                          children: [
+                            const Icon(Icons.airport_shuttle_outlined, size: 36, color: AppColors.textSecondary),
+                            const SizedBox(height: 8),
+                            const Text(
+                              'No Vehicle or Driver Allotted',
+                              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              'You can create the booking without vehicle/driver and assign up to 5 later.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
+                            ),
+                            const SizedBox(height: 12),
+                            OutlinedButton.icon(
+                              onPressed: () {
+                                setState(() {
+                                  _allotments.add(_AllotmentSlot());
+                                });
+                              },
+                              icon: const Icon(Icons.add, size: 18),
+                              label: const Text('Add Vehicle & Driver Slot'),
+                            ),
+                          ],
+                        ),
+                      )
+                    else ...[
+                      for (int i = 0; i < _allotments.length; i++) ...[
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: AppColors.background,
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.accent.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Text(
+                                      'Slot #${i + 1}',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.accent,
+                                      ),
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, color: AppColors.red, size: 20),
+                                    tooltip: 'Remove slot',
+                                    onPressed: () {
+                                      setState(() {
+                                        _allotments.removeAt(i);
+                                      });
+                                    },
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              SearchableSelectField<String>(
+                                label: 'Vehicle (Required for Slot #${i + 1})',
+                                hint: 'Select vehicle',
+                                value: _allotments[i].vehicleId,
+                                selectedDisplay: _allotments[i].vehicleNumber,
+                                isRequired: true,
+                                items: vehicles.map((v) {
+                                  return SearchableSelectItem(
+                                    value: v.id,
+                                    title: v.vehicleNumber,
+                                    subtitle: '${v.vehicleType} • ${v.capacity} • ${v.status.label}',
+                                  );
+                                }).toList(),
+                                onSelected: (id) {
+                                  final selected = vehicles.firstWhere((v) => v.id == id);
+                                  setState(() {
+                                    _allotments[i].vehicleId = id;
+                                    _allotments[i].vehicleNumber = selected.vehicleNumber;
+                                  });
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              SearchableSelectField<String>(
+                                label: 'Driver (Optional for Slot #${i + 1})',
+                                hint: 'Select driver (or leave empty)',
+                                value: _allotments[i].driverId,
+                                selectedDisplay: _allotments[i].driverName,
+                                isRequired: false,
+                                items: drivers.map((d) {
+                                  return SearchableSelectItem(
+                                    value: d.id,
+                                    title: d.name,
+                                    subtitle: '${d.mobileNumber} • ${d.status.label}',
+                                  );
+                                }).toList(),
+                                onSelected: (id) {
+                                  final selected = drivers.firstWhere((d) => d.id == id);
+                                  setState(() {
+                                    _allotments[i].driverId = id;
+                                    _allotments[i].driverName = selected.name;
+                                    _allotments[i].driverMobile = selected.mobileNumber;
+                                  });
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      if (_allotments.length < 5)
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: OutlinedButton.icon(
+                            onPressed: () {
+                              setState(() {
+                                _allotments.add(_AllotmentSlot());
+                              });
+                            },
+                            icon: const Icon(Icons.add, size: 18),
+                            label: Text('Add Another Slot (${_allotments.length}/5)'),
+                          ),
+                        )
+                      else
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 4),
+                          child: Text(
+                            'Maximum allotment limit reached (5 slots)',
+                            style: TextStyle(fontSize: 12, color: AppColors.textSecondary, fontStyle: FontStyle.italic),
+                          ),
+                        ),
+                    ],
                   ],
                 ),
               ),

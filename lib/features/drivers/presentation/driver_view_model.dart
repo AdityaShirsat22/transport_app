@@ -1,5 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/enums/driver_status.dart';
+import '../../../core/sync/sync_engine.dart';
 import '../data/driver_repository.dart';
 import '../domain/driver_model.dart';
 
@@ -54,9 +55,23 @@ class DriverState {
 
 class DriverViewModel extends StateNotifier<DriverState> {
   final DriverRepository _repo;
+  final void Function() _autoSync;
 
-  DriverViewModel(this._repo) : super(const DriverState()) {
+  DriverViewModel(this._repo, this._autoSync) : super(const DriverState()) {
     loadDrivers();
+    _repo.addListener(_onRepoChanged);
+  }
+
+  void _onRepoChanged() {
+    if (mounted) {
+      loadDrivers();
+    }
+  }
+
+  @override
+  void dispose() {
+    _repo.removeListener(_onRepoChanged);
+    super.dispose();
   }
 
   void loadDrivers() {
@@ -90,18 +105,21 @@ class DriverViewModel extends StateNotifier<DriverState> {
 
     _repo.add(newDriver);
     loadDrivers();
+    _autoSync();
     return true;
   }
 
   bool updateDriver(Driver driver) {
     _repo.update(driver);
     loadDrivers();
+    _autoSync();
     return true;
   }
 
   void updateStatus(String id, DriverStatus status) {
     _repo.updateStatus(id, status);
     loadDrivers();
+    _autoSync();
   }
 
   bool deleteDriver(String id) {
@@ -112,6 +130,7 @@ class DriverViewModel extends StateNotifier<DriverState> {
     }
     _repo.delete(id);
     loadDrivers();
+    _autoSync();
     return true;
   }
 }
@@ -119,5 +138,6 @@ class DriverViewModel extends StateNotifier<DriverState> {
 final driverViewModelProvider =
     StateNotifierProvider<DriverViewModel, DriverState>((ref) {
   final repo = ref.watch(driverRepositoryProvider);
-  return DriverViewModel(repo);
+  final sync = ref.read(syncEngineProvider.notifier);
+  return DriverViewModel(repo, () => sync.triggerAutoSync());
 });

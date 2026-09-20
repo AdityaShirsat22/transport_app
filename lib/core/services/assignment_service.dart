@@ -102,39 +102,51 @@ class AssignmentService {
   AssignmentResult assignSpecific({
     required String vehicleId,
     required String vehicleNumber,
-    required String driverId,
-    required String driverName,
+    String? driverId,
+    String? driverName,
     String? transportId,
   }) {
+    final hasDriver = driverId != null && driverId.trim().isNotEmpty;
+    final cleanDriverId = hasDriver ? driverId.trim() : null;
+    final cleanDriverName = (hasDriver && driverName != null && driverName.trim().isNotEmpty)
+        ? driverName.trim()
+        : null;
+
     _vehicleRepo.updateStatus(
       vehicleId,
       VehicleStatus.onTrip,
-      driverId: driverId,
-      driverName: driverName,
+      driverId: cleanDriverId,
+      driverName: cleanDriverName,
+      clearDriver: !hasDriver,
     );
-    _driverRepo.updateStatus(
-      driverId,
-      DriverStatus.onTrip,
-      vehicleId: vehicleId,
-      vehicleNumber: vehicleNumber,
-    );
+
+    if (hasDriver) {
+      _driverRepo.updateStatus(
+        cleanDriverId!,
+        DriverStatus.onTrip,
+        vehicleId: vehicleId,
+        vehicleNumber: vehicleNumber,
+      );
+    }
 
     if (transportId != null && transportId.isNotEmpty) {
       _transportRepo.recordVehicleAssignment(transportId: transportId, vehicleId: vehicleId);
-      _transportRepo.recordDriverAssignment(transportId: transportId, driverId: driverId);
+      if (hasDriver) {
+        _transportRepo.recordDriverAssignment(transportId: transportId, driverId: cleanDriverId!);
+      }
     }
 
     return AssignmentResult(
       isSuccess: true,
       vehicle: _vehicleRepo.getById(vehicleId),
-      driver: _driverRepo.getById(driverId),
+      driver: hasDriver ? _driverRepo.getById(cleanDriverId!) : null,
     );
   }
 
   /// Release a vehicle back to AVAILABLE
   void releaseVehicle(String? vehicleId, {String? transportId}) {
-    if (vehicleId == null) return;
-    _vehicleRepo.updateStatus(vehicleId, VehicleStatus.available, driverId: null, driverName: null);
+    if (vehicleId == null || vehicleId.trim().isEmpty) return;
+    _vehicleRepo.updateStatus(vehicleId, VehicleStatus.available, driverId: null, driverName: null, clearDriver: true);
     if (transportId != null && transportId.isNotEmpty) {
       _transportRepo.releaseVehicleAssignment(transportId: transportId, vehicleId: vehicleId);
     }
@@ -142,8 +154,8 @@ class AssignmentService {
 
   /// Release a driver back to AVAILABLE
   void releaseDriver(String? driverId, {String? transportId}) {
-    if (driverId == null) return;
-    _driverRepo.updateStatus(driverId, DriverStatus.available, vehicleId: null, vehicleNumber: null);
+    if (driverId == null || driverId.trim().isEmpty) return;
+    _driverRepo.updateStatus(driverId, DriverStatus.available, vehicleId: null, vehicleNumber: null, clearVehicle: true);
     if (transportId != null && transportId.isNotEmpty) {
       _transportRepo.releaseDriverAssignment(transportId: transportId, driverId: driverId);
     }
@@ -161,11 +173,18 @@ class AssignmentService {
       releaseVehicle(oldVehicleId, transportId: transportId);
     }
 
+    final hasDriver = driverId != null && driverId.trim().isNotEmpty;
+    final cleanDriverId = hasDriver ? driverId.trim() : null;
+    final cleanDriverName = (hasDriver && driverName != null && driverName.trim().isNotEmpty)
+        ? driverName.trim()
+        : null;
+
     _vehicleRepo.updateStatus(
       newVehicleId,
       VehicleStatus.onTrip,
-      driverId: driverId,
-      driverName: driverName,
+      driverId: cleanDriverId,
+      driverName: cleanDriverName,
+      clearDriver: !hasDriver,
     );
 
     if (transportId != null && transportId.isNotEmpty) {

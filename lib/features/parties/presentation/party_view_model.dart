@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/sync/sync_engine.dart';
 import '../../transport/data/transport_repository.dart';
 import '../data/party_repository.dart';
 import '../domain/party_model.dart';
@@ -60,8 +61,9 @@ class PartyState {
 class PartyViewModel extends StateNotifier<PartyState> {
   final PartyRepository _partyRepo;
   final TransportRepository _transportRepo;
+  final void Function() _autoSync;
 
-  PartyViewModel(this._partyRepo, this._transportRepo)
+  PartyViewModel(this._partyRepo, this._transportRepo, this._autoSync)
       : super(const PartyState()) {
     loadParties();
   }
@@ -110,18 +112,21 @@ class PartyViewModel extends StateNotifier<PartyState> {
 
     _partyRepo.add(newParty);
     loadParties();
+    _autoSync();
     return true;
   }
 
   bool updateParty(Party party) {
     _partyRepo.update(party);
     loadParties();
+    _autoSync();
     return true;
   }
 
   void deleteParty(String id) {
     _partyRepo.delete(id);
     loadParties();
+    _autoSync();
   }
 }
 
@@ -129,5 +134,6 @@ final partyViewModelProvider =
     StateNotifierProvider<PartyViewModel, PartyState>((ref) {
   final partyRepo = ref.watch(partyRepositoryProvider);
   final transportRepo = ref.watch(transportRepositoryProvider);
-  return PartyViewModel(partyRepo, transportRepo);
+  final sync = ref.read(syncEngineProvider.notifier);
+  return PartyViewModel(partyRepo, transportRepo, () => sync.triggerAutoSync());
 });

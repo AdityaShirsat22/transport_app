@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../core/sync/sync_engine.dart';
 import '../data/shipping_line_repository.dart';
 import '../domain/shipping_line_model.dart';
 
@@ -32,8 +33,9 @@ class ShippingLineState {
 
 class ShippingLineViewModel extends StateNotifier<ShippingLineState> {
   final ShippingLineRepository _repo;
+  final void Function() _autoSync;
 
-  ShippingLineViewModel(this._repo) : super(const ShippingLineState()) {
+  ShippingLineViewModel(this._repo, this._autoSync) : super(const ShippingLineState()) {
     loadItems();
   }
 
@@ -54,21 +56,25 @@ class ShippingLineViewModel extends StateNotifier<ShippingLineState> {
     );
     _repo.add(item);
     loadItems();
+    _autoSync();
   }
 
   void updateShippingLine(ShippingLine item) {
     _repo.update(item);
     loadItems();
+    _autoSync();
   }
 
   void deleteShippingLine(String id) {
     _repo.delete(id);
     loadItems();
+    _autoSync();
   }
 }
 
 final shippingLineViewModelProvider =
     StateNotifierProvider<ShippingLineViewModel, ShippingLineState>((ref) {
   final repo = ref.watch(shippingLineRepositoryProvider);
-  return ShippingLineViewModel(repo);
+  final sync = ref.read(syncEngineProvider.notifier);
+  return ShippingLineViewModel(repo, () => sync.triggerAutoSync());
 });
