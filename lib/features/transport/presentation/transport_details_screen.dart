@@ -16,6 +16,7 @@ import '../domain/transport_model.dart';
 import 'notification_preview_dialog.dart';
 import 'reassign_dialog.dart';
 import 'transport_view_model.dart';
+import '../../../core/auth/auth_provider.dart';
 import '../../../core/widgets/searchable_select_dialog.dart';
 import '../../drivers/presentation/driver_view_model.dart';
 import '../../vehicles/presentation/vehicle_view_model.dart';
@@ -787,29 +788,32 @@ class TransportDetailsScreen extends ConsumerWidget {
 
     final activityLogs = ref.watch(transportViewModelProvider.select((s) => s.getActivityLogsFor(transport.id)));
     final isMobile = ResponsiveLayout.isMobile(context);
+    final isCoordinator = ref.watch(authProvider).user?.role == 'Coordinator';
 
     final lastSequentialIndex = _resolveLastSequentialIndex(transport, activityLogs);
 
-    // Primary Next Action Button
+    // Primary Next Action Button (Super Admin only - Coordinator does not advance operational statuses)
     Widget? bottomActionButton;
-    if (transport.canBeCompleted) {
-      bottomActionButton = AppButton(
-        text: 'COMPLETE TRANSPORT',
-        icon: Icons.check_circle,
-        onPressed: () => _showCompleteSheet(context, ref, transport),
-      );
-    } else if (transport.status.isException && !transport.status.isCancelled) {
-      bottomActionButton = AppButton(
-        text: 'RESOLVE INCIDENT & RESUME TRIP',
-        icon: Icons.play_arrow_rounded,
-        onPressed: () => _showResumeTripSheet(context, ref, transport, lastSequentialIndex),
-      );
-    } else if (transport.status.nextStatus != null && transport.status.isActive) {
-      bottomActionButton = AppButton(
-        text: 'ADVANCE: ${transport.status.nextStatus!.label.toUpperCase()}',
-        icon: Icons.fast_forward,
-        onPressed: () => _showUpdateStatusSheet(context, ref, transport),
-      );
+    if (!isCoordinator) {
+      if (transport.canBeCompleted) {
+        bottomActionButton = AppButton(
+          text: 'COMPLETE TRANSPORT',
+          icon: Icons.check_circle,
+          onPressed: () => _showCompleteSheet(context, ref, transport),
+        );
+      } else if (transport.status.isException && !transport.status.isCancelled) {
+        bottomActionButton = AppButton(
+          text: 'RESOLVE INCIDENT & RESUME TRIP',
+          icon: Icons.play_arrow_rounded,
+          onPressed: () => _showResumeTripSheet(context, ref, transport, lastSequentialIndex),
+        );
+      } else if (transport.status.nextStatus != null && transport.status.isActive) {
+        bottomActionButton = AppButton(
+          text: 'ADVANCE: ${transport.status.nextStatus!.label.toUpperCase()}',
+          icon: Icons.fast_forward,
+          onPressed: () => _showUpdateStatusSheet(context, ref, transport),
+        );
+      }
     }
 
     return Scaffold(
@@ -827,13 +831,15 @@ class TransportDetailsScreen extends ConsumerWidget {
           ],
         ),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.delete_outline, color: AppColors.red),
-            tooltip: 'Delete Transport',
-            onPressed: () => _confirmDeleteTransport(context, ref, transport),
-          ),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert),
+          if (!isCoordinator)
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: AppColors.red),
+              tooltip: 'Delete Transport',
+              onPressed: () => _confirmDeleteTransport(context, ref, transport),
+            ),
+          if (!isCoordinator)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
             onSelected: (val) {
               if (val == 'whatsapp') _showNotificationPreview(context, transport);
               if (val == 'reassign') _showReassignSheet(context, transport);
@@ -863,41 +869,45 @@ class TransportDetailsScreen extends ConsumerWidget {
                     ],
                   ),
                 ),
-                const PopupMenuDivider(),
-                if (transport.status.isException && !transport.status.isCancelled)
-                  const PopupMenuItem(
-                    value: 'resolve',
-                    child: Row(
-                      children: [
-                        Icon(Icons.play_circle_outline, size: 18, color: AppColors.green),
-                        SizedBox(width: 10),
-                        Text('Resolve & Resume Trip'),
-                      ],
+                if (!isCoordinator) ...[
+                  const PopupMenuDivider(),
+                  if (transport.status.isException && !transport.status.isCancelled)
+                    const PopupMenuItem(
+                      value: 'resolve',
+                      child: Row(
+                        children: [
+                          Icon(Icons.play_circle_outline, size: 18, color: AppColors.green),
+                          SizedBox(width: 10),
+                          Text('Resolve & Resume Trip'),
+                        ],
+                      ),
+                    )
+                  else
+                    const PopupMenuItem(
+                      value: 'exception',
+                      child: Row(
+                        children: [
+                          Icon(Icons.warning_amber_rounded, size: 18, color: AppColors.red),
+                          SizedBox(width: 10),
+                          Text('Report Incident / Exception'),
+                        ],
+                      ),
                     ),
-                  )
-                else
-                  const PopupMenuItem(
-                    value: 'exception',
-                    child: Row(
-                      children: [
-                        Icon(Icons.warning_amber_rounded, size: 18, color: AppColors.red),
-                        SizedBox(width: 10),
-                        Text('Report Incident / Exception'),
-                      ],
-                    ),
-                  ),
+                ],
               ],
-              const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 'delete',
-                child: Row(
-                  children: [
-                    Icon(Icons.delete_outline, size: 18, color: AppColors.red),
-                    SizedBox(width: 10),
-                    Text('Delete Transport', style: TextStyle(color: AppColors.red)),
-                  ],
+              if (!isCoordinator) ...[
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Row(
+                    children: [
+                      Icon(Icons.delete_outline, size: 18, color: AppColors.red),
+                      SizedBox(width: 10),
+                      Text('Delete Transport', style: TextStyle(color: AppColors.red)),
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ],
           ),
         ],
@@ -974,7 +984,7 @@ class TransportDetailsScreen extends ConsumerWidget {
                               style: const TextStyle(color: AppColors.red, fontSize: 12, fontWeight: FontWeight.bold),
                             ),
                           ),
-                          if (!transport.status.isCancelled) ...[
+                          if (!transport.status.isCancelled && !isCoordinator) ...[
                             const SizedBox(width: 8),
                             TextButton.icon(
                               style: TextButton.styleFrom(
@@ -1021,10 +1031,9 @@ class TransportDetailsScreen extends ConsumerWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('Container & Route', style: AppTextStyles.headingSmall),
-                      IconButton(
-                        tooltip: 'Edit Container & Seal',
-                        icon: const Icon(Icons.edit_outlined, size: 18),
-                        visualDensity: VisualDensity.compact,
+                      TextButton.icon(
+                        icon: const Icon(Icons.edit_outlined, size: 16),
+                        label: const Text('Edit Container & Seal'),
                         onPressed: () => _showEditContainerSealSheet(context, ref, transport),
                       ),
                     ],

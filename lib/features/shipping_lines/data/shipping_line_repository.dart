@@ -12,17 +12,34 @@ abstract class ShippingLineRepository {
   void update(ShippingLine shippingLine);
   void delete(String id);
   Future<void> reloadFromDatabase();
+  Future<void> get initialized;
+  void addListener(void Function() listener);
+  void removeListener(void Function() listener);
 }
 
 class ProductionShippingLineRepository implements ShippingLineRepository {
   final AppDatabase _db;
   final List<ShippingLine> _shippingLines = [];
+  final List<void Function()> _listeners = [];
   final Completer<void> _initCompleter = Completer<void>();
 
+  @override
   Future<void> get initialized => _initCompleter.future;
 
   ProductionShippingLineRepository(this._db) {
     _init();
+  }
+
+  @override
+  void addListener(void Function() listener) => _listeners.add(listener);
+
+  @override
+  void removeListener(void Function() listener) => _listeners.remove(listener);
+
+  void _notifyListeners() {
+    for (final l in List<void Function()>.from(_listeners)) {
+      l();
+    }
   }
 
   Future<void> _init() async {
@@ -42,20 +59,19 @@ class ProductionShippingLineRepository implements ShippingLineRepository {
             ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
           .get();
 
-      if (rows.isNotEmpty) {
-        _shippingLines.clear();
-        for (final row in rows) {
-          _shippingLines.add(
-            ShippingLine(
-              id: row.id,
-              name: row.name,
-              code: row.code,
-              isActive: row.isActive,
-              createdAt: row.createdAt,
-            ),
-          );
-        }
+      _shippingLines.clear();
+      for (final row in rows) {
+        _shippingLines.add(
+          ShippingLine(
+            id: row.id,
+            name: row.name,
+            code: row.code,
+            isActive: row.isActive,
+            createdAt: row.createdAt,
+          ),
+        );
       }
+      _notifyListeners();
     } catch (_) {
       // Safe fallback
     }
@@ -78,6 +94,7 @@ class ProductionShippingLineRepository implements ShippingLineRepository {
     _shippingLines.insert(0, shippingLine);
     _persistToDb(shippingLine);
     _enqueueSync(shippingLine, 'CREATE');
+    _notifyListeners();
   }
 
   @override
@@ -87,6 +104,7 @@ class ProductionShippingLineRepository implements ShippingLineRepository {
       _shippingLines[index] = shippingLine;
       _persistToDb(shippingLine);
       _enqueueSync(shippingLine, 'UPDATE');
+      _notifyListeners();
     }
   }
 
@@ -97,6 +115,7 @@ class ProductionShippingLineRepository implements ShippingLineRepository {
       _shippingLines.removeAt(index);
       _deleteFromDb(id);
       _enqueueSyncDelete(id);
+      _notifyListeners();
     }
   }
 

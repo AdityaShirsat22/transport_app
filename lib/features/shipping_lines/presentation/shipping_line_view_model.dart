@@ -37,6 +37,22 @@ class ShippingLineViewModel extends StateNotifier<ShippingLineState> {
 
   ShippingLineViewModel(this._repo, this._autoSync) : super(const ShippingLineState()) {
     loadItems();
+    _repo.addListener(_onRepoChanged);
+    _repo.initialized.then((_) {
+      if (mounted) loadItems();
+    });
+  }
+
+  void _onRepoChanged() {
+    if (mounted) {
+      loadItems();
+    }
+  }
+
+  @override
+  void dispose() {
+    _repo.removeListener(_onRepoChanged);
+    super.dispose();
   }
 
   void loadItems() {

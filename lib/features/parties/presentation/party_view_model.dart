@@ -66,6 +66,22 @@ class PartyViewModel extends StateNotifier<PartyState> {
   PartyViewModel(this._partyRepo, this._transportRepo, this._autoSync)
       : super(const PartyState()) {
     loadParties();
+    _partyRepo.addListener(_onRepoChanged);
+    _partyRepo.initialized.then((_) {
+      if (mounted) loadParties();
+    });
+  }
+
+  void _onRepoChanged() {
+    if (mounted) {
+      loadParties();
+    }
+  }
+
+  @override
+  void dispose() {
+    _partyRepo.removeListener(_onRepoChanged);
+    super.dispose();
   }
 
   void loadParties() {

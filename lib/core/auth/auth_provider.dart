@@ -80,10 +80,37 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  Future<bool> loginWithPin({
+    required String pin,
+    required String role,
+    String? name,
+    String? email,
+  }) async {
+    state = state.copyWith(isLoading: true, clearError: true);
+    try {
+      final user = await _authService.loginWithPin(
+        pin: pin,
+        role: role,
+        name: name,
+        email: email,
+      );
+      state = state.copyWith(user: user, isLoading: false);
+      return true;
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: e.toString().replaceAll('Exception: ', ''),
+      );
+      return false;
+    }
+  }
+
   Future<void> logout() async {
-    state = state.copyWith(isLoading: true);
-    await _authService.signOut();
-    state = const AuthState(isInitialized: true);
+    try {
+      await _authService.signOut();
+    } finally {
+      state = const AuthState(isInitialized: true);
+    }
   }
 }
 

@@ -43,25 +43,47 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   Future<void> _runStartupSync() async {
     if (_hasSyncedOnStartup) return;
+    if (!mounted) return;
     final authState = ref.read(authProvider);
     if (authState.user == null) return; // Not authenticated yet; skip
 
     _hasSyncedOnStartup = true;
 
-    // Pull all cloud data into local SQLite
-    await ref.read(syncEngineProvider.notifier).startupSync();
+    try {
+      final syncEngine = ref.read(syncEngineProvider.notifier);
+      final vehicleRepo = ref.read(vehicleRepositoryProvider);
+      final driverRepo = ref.read(driverRepositoryProvider);
+      final partyRepo = ref.read(partyRepositoryProvider);
+      final shippingLineRepo = ref.read(shippingLineRepositoryProvider);
+      final locationRepo = ref.read(locationRepositoryProvider);
+      final portCfsRepo = ref.read(portCfsRepositoryProvider);
+      final transportRepo = ref.read(transportRepositoryProvider);
 
-    // Reload every repository's in-memory cache from the freshly updated SQLite
-    await ref.read(vehicleRepositoryProvider).reloadFromDatabase();
-    await ref.read(driverRepositoryProvider).reloadFromDatabase();
-    await ref.read(partyRepositoryProvider).reloadFromDatabase();
-    await ref.read(shippingLineRepositoryProvider).reloadFromDatabase();
-    await ref.read(locationRepositoryProvider).reloadFromDatabase();
-    await ref.read(portCfsRepositoryProvider).reloadFromDatabase();
-    await ref.read(transportRepositoryProvider).reloadFromDatabase();
+      // Try pulling cloud data into local SQLite (doesn't fail local reload if cloud sync fails/offline)
+      try {
+        await syncEngine.startupSync();
+      } catch (e) {
+        debugPrint('Cloud startup sync skipped/failed: $e');
+      }
+      if (!mounted) return;
 
-    // Notify every ViewModel so the UI rebuilds with fresh data
-    if (mounted) {
+      // Reload every repository's in-memory cache from the freshly updated SQLite
+      await vehicleRepo.reloadFromDatabase();
+      if (!mounted) return;
+      await driverRepo.reloadFromDatabase();
+      if (!mounted) return;
+      await partyRepo.reloadFromDatabase();
+      if (!mounted) return;
+      await shippingLineRepo.reloadFromDatabase();
+      if (!mounted) return;
+      await locationRepo.reloadFromDatabase();
+      if (!mounted) return;
+      await portCfsRepo.reloadFromDatabase();
+      if (!mounted) return;
+      await transportRepo.reloadFromDatabase();
+      if (!mounted) return;
+
+      // Notify every ViewModel so the UI rebuilds with fresh data
       ref.read(vehicleViewModelProvider.notifier).loadVehicles();
       ref.read(driverViewModelProvider.notifier).loadDrivers();
       ref.read(partyViewModelProvider.notifier).loadParties();
@@ -69,11 +91,25 @@ class _AppShellState extends ConsumerState<AppShell> {
       ref.read(locationViewModelProvider.notifier).loadLocations();
       ref.read(portCfsViewModelProvider.notifier).loadItems();
       ref.read(transportViewModelProvider.notifier).loadTransports();
+    } catch (_) {
+      // Gracefully ignore if unmounted or cancelled during startup sync
     }
   }
 
 
-  int _calculateSelectedIndex(String location) {
+  int _calculateSelectedIndex(String location, bool isCoordinator) {
+    if (isCoordinator) {
+      if (location.startsWith('/transport')) return 0;
+      if (location.startsWith('/vehicles')) return 1;
+      if (location.startsWith('/drivers')) return 2;
+      return 0;
+    }
+    // Super Admin mobile NavigationBar has 5 destinations (indices 0–4):
+    // Dashboard, Trips, Fleet, Masters, Reports.
+    // Settings, parties, shipping-lines, locations, ports-cfs are NOT in the
+    // bottom nav bar — they are sidebar-only on desktop. For those routes we
+    // return 0 (Dashboard) as a safe fallback so the NavigationBar never
+    // receives an out-of-range selectedIndex.
     if (location == '/dashboard') return 0;
     if (location.startsWith('/transport')) return 1;
     if (location.startsWith('/vehicles') || location.startsWith('/drivers')) return 2;
@@ -85,11 +121,25 @@ class _AppShellState extends ConsumerState<AppShell> {
       return 3;
     }
     if (location.startsWith('/reports')) return 4;
-    if (location.startsWith('/settings')) return 5;
+    // /settings and any other route: fall back to 0 to avoid index-out-of-range.
     return 0;
   }
 
-  void _onItemTapped(int index, BuildContext context) {
+  void _onItemTapped(int index, BuildContext context, bool isCoordinator) {
+    if (isCoordinator) {
+      switch (index) {
+        case 0:
+          context.go('/transport');
+          break;
+        case 1:
+          context.go('/vehicles');
+          break;
+        case 2:
+          context.go('/drivers');
+          break;
+      }
+      return;
+    }
     switch (index) {
       case 0:
         context.go('/dashboard');
@@ -112,14 +162,42 @@ class _AppShellState extends ConsumerState<AppShell> {
     }
   }
 
+  void _showLogoutConfirmation(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('Sign Out'),
+        content: const Text('Are you sure you want to sign out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () async {
+              Navigator.of(dialogCtx).pop();
+              await ref.read(authProvider.notifier).logout();
+              if (context.mounted) {
+                context.go('/login');
+              }
+            },
+            child: const Text('Sign Out', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isMobile = ResponsiveLayout.isMobile(context);
     final location = GoRouterState.of(context).uri.path;
-    final selectedIndex = _calculateSelectedIndex(location);
     final syncState = ref.watch(syncEngineProvider);
     final authState = ref.watch(authProvider);
     final user = authState.user;
+    final isCoordinator = user?.role == 'Coordinator';
+    final selectedIndex = _calculateSelectedIndex(location, isCoordinator);
 
     final isDetailOrChild = location == '/transport/create' ||
         (location.startsWith('/transport/') && location != '/transport');
@@ -156,7 +234,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                             overflow: TextOverflow.ellipsis,
                           ),
                           Text(
-                            user?.name ?? 'Operations Manager',
+                            user?.name ?? (isCoordinator ? 'Operations Coordinator' : 'Operations Manager'),
                             style: AppTextStyles.bodySmall.copyWith(
                               fontSize: 10,
                               color: AppColors.textMuted,
@@ -171,7 +249,9 @@ class _AppShellState extends ConsumerState<AppShell> {
                 actions: [
                   // Sync dot indicator
                   InkWell(
-                    onTap: () => context.go('/settings'),
+                    onTap: () {
+                      if (!isCoordinator) context.go('/settings');
+                    },
                     borderRadius: BorderRadius.circular(16),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -201,21 +281,29 @@ class _AppShellState extends ConsumerState<AppShell> {
                       ),
                     ),
                   ),
-                  IconButton(
-                    icon: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: AppColors.accent.withValues(alpha: 0.1),
-                        shape: BoxShape.circle,
+                  if (!isCoordinator) ...[
+                    IconButton(
+                      icon: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withValues(alpha: 0.1),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.add, size: 20, color: AppColors.accent),
                       ),
-                      child: const Icon(Icons.add, size: 20, color: AppColors.accent),
+                      tooltip: 'New Transport Booking',
+                      onPressed: () => context.go('/transport/create'),
                     ),
-                    tooltip: 'New Transport Booking',
-                    onPressed: () => context.go('/transport/create'),
-                  ),
-                  const SizedBox(width: 4),
+                    const SizedBox(width: 4),
+                  ],
                   InkWell(
-                    onTap: () => context.go('/settings'),
+                    onTap: () {
+                      if (isCoordinator) {
+                        _showLogoutConfirmation(context);
+                      } else {
+                        context.go('/settings');
+                      }
+                    },
                     child: CircleAvatar(
                       radius: 14,
                       backgroundColor: AppColors.accentLight,
@@ -225,7 +313,13 @@ class _AppShellState extends ConsumerState<AppShell> {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  if (isCoordinator)
+                    IconButton(
+                      icon: const Icon(Icons.logout, size: 20, color: AppColors.red),
+                      tooltip: 'Sign Out',
+                      onPressed: () => _showLogoutConfirmation(context),
+                    ),
+                  const SizedBox(width: 8),
                 ],
               ),
         drawer: isDetailOrChild
@@ -238,35 +332,53 @@ class _AppShellState extends ConsumerState<AppShell> {
         bottomNavigationBar: isDetailOrChild
             ? null
             : NavigationBar(
-                selectedIndex: selectedIndex > 4 ? 0 : selectedIndex,
-                onDestinationSelected: (index) => _onItemTapped(index, context),
-                destinations: const [
-                  NavigationDestination(
-                    icon: Icon(Icons.dashboard_outlined),
-                    selectedIcon: Icon(Icons.dashboard),
-                    label: 'Dashboard',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.alt_route_outlined),
-                    selectedIcon: Icon(Icons.alt_route),
-                    label: 'Trips',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.local_shipping_outlined),
-                    selectedIcon: Icon(Icons.local_shipping),
-                    label: 'Fleet',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.hub_outlined),
-                    selectedIcon: Icon(Icons.hub),
-                    label: 'Masters',
-                  ),
-                  NavigationDestination(
-                    icon: Icon(Icons.bar_chart_outlined),
-                    selectedIcon: Icon(Icons.bar_chart),
-                    label: 'Reports',
-                  ),
-                ],
+                selectedIndex: selectedIndex,
+                onDestinationSelected: (index) => _onItemTapped(index, context, isCoordinator),
+                destinations: isCoordinator
+                    ? const [
+                        NavigationDestination(
+                          icon: Icon(Icons.alt_route_outlined),
+                          selectedIcon: Icon(Icons.alt_route),
+                          label: 'Trips',
+                        ),
+                        NavigationDestination(
+                          icon: Icon(Icons.local_shipping_outlined),
+                          selectedIcon: Icon(Icons.local_shipping),
+                          label: 'Fleet',
+                        ),
+                        NavigationDestination(
+                          icon: Icon(Icons.badge_outlined),
+                          selectedIcon: Icon(Icons.badge),
+                          label: 'Driver',
+                        ),
+                      ]
+                    : const [
+                        NavigationDestination(
+                          icon: Icon(Icons.dashboard_outlined),
+                          selectedIcon: Icon(Icons.dashboard),
+                          label: 'Dashboard',
+                        ),
+                        NavigationDestination(
+                          icon: Icon(Icons.alt_route_outlined),
+                          selectedIcon: Icon(Icons.alt_route),
+                          label: 'Trips',
+                        ),
+                        NavigationDestination(
+                          icon: Icon(Icons.local_shipping_outlined),
+                          selectedIcon: Icon(Icons.local_shipping),
+                          label: 'Fleet',
+                        ),
+                        NavigationDestination(
+                          icon: Icon(Icons.hub_outlined),
+                          selectedIcon: Icon(Icons.hub),
+                          label: 'Masters',
+                        ),
+                        NavigationDestination(
+                          icon: Icon(Icons.bar_chart_outlined),
+                          selectedIcon: Icon(Icons.bar_chart),
+                          label: 'Reports',
+                        ),
+                      ],
               ),
       );
     }
@@ -301,6 +413,7 @@ class _SidebarContent extends ConsumerWidget {
     final syncState = ref.watch(syncEngineProvider);
     final authState = ref.watch(authProvider);
     final user = authState.user;
+    final isCoordinator = user?.role == 'Coordinator';
 
     return Container(
       color: AppColors.primary,
@@ -356,152 +469,181 @@ class _SidebarContent extends ConsumerWidget {
             ),
             const Divider(color: Color(0xFF334155), height: 1),
 
-            // Quick Create Button
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accent,
-                  foregroundColor: Colors.white,
-                  minimumSize: const Size(double.infinity, 42),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            // Quick Create Button (Super Admin only)
+            if (!isCoordinator)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accent,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 42),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  icon: const Icon(Icons.add, size: 18),
+                  label: const Text('New Transport', style: TextStyle(fontWeight: FontWeight.w600)),
+                  onPressed: () {
+                    if (isMobile) Navigator.of(context).pop();
+                    context.go('/transport/create');
+                  },
                 ),
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('New Transport', style: TextStyle(fontWeight: FontWeight.w600)),
-                onPressed: () {
-                  if (isMobile) Navigator.of(context).pop();
-                  context.go('/transport/create');
-                },
               ),
-            ),
 
             // Navigation Items List
             Expanded(
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                children: [
-                  _buildNavItem(
-                    context,
-                    title: 'Dashboard',
-                    icon: Icons.dashboard_outlined,
-                    activeIcon: Icons.dashboard,
-                    route: '/dashboard',
-                  ),
-                  _buildNavItem(
-                    context,
-                    title: 'Transport Operations',
-                    icon: Icons.alt_route_outlined,
-                    activeIcon: Icons.alt_route,
-                    route: '/transport',
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(14, 16, 14, 6),
-                    child: Text(
-                      'FLEET & CREW',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF64748B),
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  ),
-                  _buildNavItem(
-                    context,
-                    title: 'Vehicles',
-                    icon: Icons.fire_truck_outlined,
-                    activeIcon: Icons.fire_truck,
-                    route: '/vehicles',
-                  ),
-                  _buildNavItem(
-                    context,
-                    title: 'Drivers',
-                    icon: Icons.badge_outlined,
-                    activeIcon: Icons.badge,
-                    route: '/drivers',
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(14, 16, 14, 6),
-                    child: Text(
-                      'LOGISTICS MASTERS',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF64748B),
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  ),
-                  _buildNavItem(
-                    context,
-                    title: 'Masters Hub',
-                    icon: Icons.hub_outlined,
-                    activeIcon: Icons.hub,
-                    route: '/masters',
-                  ),
-                  _buildNavItem(
-                    context,
-                    title: 'Parties / Customers',
-                    icon: Icons.people_outline,
-                    activeIcon: Icons.people,
-                    route: '/parties',
-                  ),
-                  _buildNavItem(
-                    context,
-                    title: 'Shipping Lines',
-                    icon: Icons.directions_boat_outlined,
-                    activeIcon: Icons.directions_boat,
-                    route: '/shipping-lines',
-                  ),
-                  _buildNavItem(
-                    context,
-                    title: 'Locations',
-                    icon: Icons.location_on_outlined,
-                    activeIcon: Icons.location_on,
-                    route: '/locations',
-                  ),
-                  _buildNavItem(
-                    context,
-                    title: 'Port / CFS',
-                    icon: Icons.anchor_outlined,
-                    activeIcon: Icons.anchor,
-                    route: '/ports-cfs',
-                  ),
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(14, 16, 14, 6),
-                    child: Text(
-                      'ANALYTICS & SYSTEM',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
-                        color: Color(0xFF64748B),
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                  ),
-                  _buildNavItem(
-                    context,
-                    title: 'Reports',
-                    icon: Icons.bar_chart_outlined,
-                    activeIcon: Icons.bar_chart,
-                    route: '/reports',
-                  ),
-                  _buildNavItem(
-                    context,
-                    title: 'Settings & Cloud',
-                    icon: Icons.settings_outlined,
-                    activeIcon: Icons.settings,
-                    route: '/settings',
-                  ),
-                ],
+                children: isCoordinator
+                    ? [
+                        _buildNavItem(
+                          context,
+                          title: 'Trips',
+                          icon: Icons.alt_route_outlined,
+                          activeIcon: Icons.alt_route,
+                          route: '/transport',
+                        ),
+                        const SizedBox(height: 4),
+                        _buildNavItem(
+                          context,
+                          title: 'Fleet',
+                          icon: Icons.fire_truck_outlined,
+                          activeIcon: Icons.fire_truck,
+                          route: '/vehicles',
+                        ),
+                        const SizedBox(height: 4),
+                        _buildNavItem(
+                          context,
+                          title: 'Driver',
+                          icon: Icons.badge_outlined,
+                          activeIcon: Icons.badge,
+                          route: '/drivers',
+                        ),
+                      ]
+                    : [
+                        _buildNavItem(
+                          context,
+                          title: 'Dashboard',
+                          icon: Icons.dashboard_outlined,
+                          activeIcon: Icons.dashboard,
+                          route: '/dashboard',
+                        ),
+                        _buildNavItem(
+                          context,
+                          title: 'Transport Operations',
+                          icon: Icons.alt_route_outlined,
+                          activeIcon: Icons.alt_route,
+                          route: '/transport',
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.fromLTRB(14, 16, 14, 6),
+                          child: Text(
+                            'FLEET & CREW',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF64748B),
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ),
+                        _buildNavItem(
+                          context,
+                          title: 'Vehicles',
+                          icon: Icons.fire_truck_outlined,
+                          activeIcon: Icons.fire_truck,
+                          route: '/vehicles',
+                        ),
+                        _buildNavItem(
+                          context,
+                          title: 'Drivers',
+                          icon: Icons.badge_outlined,
+                          activeIcon: Icons.badge,
+                          route: '/drivers',
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.fromLTRB(14, 16, 14, 6),
+                          child: Text(
+                            'LOGISTICS MASTERS',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF64748B),
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ),
+                        _buildNavItem(
+                          context,
+                          title: 'Masters Hub',
+                          icon: Icons.hub_outlined,
+                          activeIcon: Icons.hub,
+                          route: '/masters',
+                        ),
+                        _buildNavItem(
+                          context,
+                          title: 'Parties / Customers',
+                          icon: Icons.people_outline,
+                          activeIcon: Icons.people,
+                          route: '/parties',
+                        ),
+                        _buildNavItem(
+                          context,
+                          title: 'Shipping Lines',
+                          icon: Icons.directions_boat_outlined,
+                          activeIcon: Icons.directions_boat,
+                          route: '/shipping-lines',
+                        ),
+                        _buildNavItem(
+                          context,
+                          title: 'Locations',
+                          icon: Icons.location_on_outlined,
+                          activeIcon: Icons.location_on,
+                          route: '/locations',
+                        ),
+                        _buildNavItem(
+                          context,
+                          title: 'Port / CFS',
+                          icon: Icons.anchor_outlined,
+                          activeIcon: Icons.anchor,
+                          route: '/ports-cfs',
+                        ),
+                        const Padding(
+                          padding: EdgeInsets.fromLTRB(14, 16, 14, 6),
+                          child: Text(
+                            'ANALYTICS & SYSTEM',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Color(0xFF64748B),
+                              letterSpacing: 0.8,
+                            ),
+                          ),
+                        ),
+                        _buildNavItem(
+                          context,
+                          title: 'Reports',
+                          icon: Icons.bar_chart_outlined,
+                          activeIcon: Icons.bar_chart,
+                          route: '/reports',
+                        ),
+                        _buildNavItem(
+                          context,
+                          title: 'Settings & Cloud',
+                          icon: Icons.settings_outlined,
+                          activeIcon: Icons.settings,
+                          route: '/settings',
+                        ),
+                      ],
               ),
             ),
 
             // Subtle Real-time Sync Indicator Footer
             InkWell(
               onTap: () {
-                if (isMobile) Navigator.of(context).pop();
-                context.go('/settings');
+                if (!isCoordinator) {
+                  if (isMobile) Navigator.of(context).pop();
+                  context.go('/settings');
+                }
               },
               child: Container(
                 margin: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -537,18 +679,23 @@ class _SidebarContent extends ConsumerWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const Icon(Icons.chevron_right, size: 14, color: Color(0xFF64748B)),
+                    if (!isCoordinator)
+                      const Icon(Icons.chevron_right, size: 14, color: Color(0xFF64748B)),
                   ],
                 ),
               ),
             ),
 
-            // Super Admin User Profile Footnote
+            // User Profile Footnote
             const Divider(color: Color(0xFF334155), height: 1),
             InkWell(
               onTap: () {
-                if (isMobile) Navigator.of(context).pop();
-                context.go('/settings');
+                if (isCoordinator) {
+                  _showLogoutDialog(context, ref);
+                } else {
+                  if (isMobile) Navigator.of(context).pop();
+                  context.go('/settings');
+                }
               },
               child: Container(
                 padding: const EdgeInsets.all(14),
@@ -592,12 +739,46 @@ class _SidebarContent extends ConsumerWidget {
                         ],
                       ),
                     ),
+                    if (isCoordinator)
+                      IconButton(
+                        icon: const Icon(Icons.logout, size: 18, color: AppColors.red),
+                        tooltip: 'Sign Out',
+                        onPressed: () => _showLogoutDialog(context, ref),
+                      ),
                   ],
                 ),
               ),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showLogoutDialog(BuildContext context, WidgetRef ref) {
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('Sign Out'),
+        content: const Text('Are you sure you want to sign out?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogCtx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
+            onPressed: () async {
+              Navigator.of(dialogCtx).pop();
+              if (isMobile) Navigator.of(context).pop();
+              await ref.read(authProvider.notifier).logout();
+              if (context.mounted) {
+                context.go('/login');
+              }
+            },
+            child: const Text('Sign Out', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
     );
   }

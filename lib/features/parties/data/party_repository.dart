@@ -12,17 +12,34 @@ abstract class PartyRepository {
   void update(Party party);
   void delete(String id);
   Future<void> reloadFromDatabase();
+  Future<void> get initialized;
+  void addListener(void Function() listener);
+  void removeListener(void Function() listener);
 }
 
 class ProductionPartyRepository implements PartyRepository {
   final AppDatabase _db;
   final List<Party> _parties = [];
+  final List<void Function()> _listeners = [];
   final Completer<void> _initCompleter = Completer<void>();
 
+  @override
   Future<void> get initialized => _initCompleter.future;
 
   ProductionPartyRepository(this._db) {
     _init();
+  }
+
+  @override
+  void addListener(void Function() listener) => _listeners.add(listener);
+
+  @override
+  void removeListener(void Function() listener) => _listeners.remove(listener);
+
+  void _notifyListeners() {
+    for (final l in List<void Function()>.from(_listeners)) {
+      l();
+    }
   }
 
   Future<void> _init() async {
@@ -42,22 +59,21 @@ class ProductionPartyRepository implements PartyRepository {
             ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
           .get();
 
-      if (rows.isNotEmpty) {
-        _parties.clear();
-        for (final row in rows) {
-          _parties.add(
-            Party(
-              id: row.id,
-              name: row.partyName,
-              mobileNumber: row.customerMobile,
-              email: row.email,
-              city: row.city,
-              isActive: row.isActive,
-              createdAt: row.createdAt,
-            ),
-          );
-        }
+      _parties.clear();
+      for (final row in rows) {
+        _parties.add(
+          Party(
+            id: row.id,
+            name: row.partyName,
+            mobileNumber: row.customerMobile,
+            email: row.email,
+            city: row.city,
+            isActive: row.isActive,
+            createdAt: row.createdAt,
+          ),
+        );
       }
+      _notifyListeners();
     } catch (_) {
       // Safe fallback
     }
@@ -80,6 +96,7 @@ class ProductionPartyRepository implements PartyRepository {
     _parties.insert(0, party);
     _persistToDb(party);
     _enqueueSync(party, 'CREATE');
+    _notifyListeners();
   }
 
   @override
@@ -89,6 +106,7 @@ class ProductionPartyRepository implements PartyRepository {
       _parties[index] = party;
       _persistToDb(party);
       _enqueueSync(party, 'UPDATE');
+      _notifyListeners();
     }
   }
 
@@ -99,6 +117,7 @@ class ProductionPartyRepository implements PartyRepository {
       _parties.removeAt(index);
       _deleteFromDb(id);
       _enqueueSyncDelete(id);
+      _notifyListeners();
     }
   }
 

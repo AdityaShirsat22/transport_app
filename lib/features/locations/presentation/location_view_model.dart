@@ -48,6 +48,22 @@ class LocationViewModel extends StateNotifier<LocationState> {
 
   LocationViewModel(this._repo, this._autoSync) : super(const LocationState()) {
     loadLocations();
+    _repo.addListener(_onRepoChanged);
+    _repo.initialized.then((_) {
+      if (mounted) loadLocations();
+    });
+  }
+
+  void _onRepoChanged() {
+    if (mounted) {
+      loadLocations();
+    }
+  }
+
+  @override
+  void dispose() {
+    _repo.removeListener(_onRepoChanged);
+    super.dispose();
   }
 
   void loadLocations() {

@@ -13,17 +13,34 @@ abstract class PortCfsRepository {
   void update(PortCfs portCfs);
   void delete(String id);
   Future<void> reloadFromDatabase();
+  Future<void> get initialized;
+  void addListener(void Function() listener);
+  void removeListener(void Function() listener);
 }
 
 class ProductionPortCfsRepository implements PortCfsRepository {
   final AppDatabase _db;
   final List<PortCfs> _items = [];
+  final List<void Function()> _listeners = [];
   final Completer<void> _initCompleter = Completer<void>();
 
+  @override
   Future<void> get initialized => _initCompleter.future;
 
   ProductionPortCfsRepository(this._db) {
     _init();
+  }
+
+  @override
+  void addListener(void Function() listener) => _listeners.add(listener);
+
+  @override
+  void removeListener(void Function() listener) => _listeners.remove(listener);
+
+  void _notifyListeners() {
+    for (final l in List<void Function()>.from(_listeners)) {
+      l();
+    }
   }
 
   Future<void> _init() async {
@@ -43,21 +60,20 @@ class ProductionPortCfsRepository implements PortCfsRepository {
             ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
           .get();
 
-      if (rows.isNotEmpty) {
-        _items.clear();
-        for (final row in rows) {
-          _items.add(
-            PortCfs(
-              id: row.id,
-              name: row.name,
-              type: PortCfsType.fromCode(row.type),
-              location: row.location,
-              isActive: row.isActive,
-              createdAt: row.createdAt,
-            ),
-          );
-        }
+      _items.clear();
+      for (final row in rows) {
+        _items.add(
+          PortCfs(
+            id: row.id,
+            name: row.name,
+            type: PortCfsType.fromCode(row.type),
+            location: row.location,
+            isActive: row.isActive,
+            createdAt: row.createdAt,
+          ),
+        );
       }
+      _notifyListeners();
     } catch (_) {
       // Safe fallback
     }
@@ -80,6 +96,7 @@ class ProductionPortCfsRepository implements PortCfsRepository {
     _items.insert(0, portCfs);
     _persistToDb(portCfs);
     _enqueueSync(portCfs, 'CREATE');
+    _notifyListeners();
   }
 
   @override
@@ -89,6 +106,7 @@ class ProductionPortCfsRepository implements PortCfsRepository {
       _items[index] = portCfs;
       _persistToDb(portCfs);
       _enqueueSync(portCfs, 'UPDATE');
+      _notifyListeners();
     }
   }
 
@@ -99,6 +117,7 @@ class ProductionPortCfsRepository implements PortCfsRepository {
       _items.removeAt(index);
       _deleteFromDb(id);
       _enqueueSyncDelete(id);
+      _notifyListeners();
     }
   }
 

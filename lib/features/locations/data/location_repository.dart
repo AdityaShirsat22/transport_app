@@ -13,17 +13,34 @@ abstract class LocationRepository {
   void update(Location location);
   void delete(String id);
   Future<void> reloadFromDatabase();
+  Future<void> get initialized;
+  void addListener(void Function() listener);
+  void removeListener(void Function() listener);
 }
 
 class ProductionLocationRepository implements LocationRepository {
   final AppDatabase _db;
   final List<Location> _locations = [];
+  final List<void Function()> _listeners = [];
   final Completer<void> _initCompleter = Completer<void>();
 
+  @override
   Future<void> get initialized => _initCompleter.future;
 
   ProductionLocationRepository(this._db) {
     _init();
+  }
+
+  @override
+  void addListener(void Function() listener) => _listeners.add(listener);
+
+  @override
+  void removeListener(void Function() listener) => _listeners.remove(listener);
+
+  void _notifyListeners() {
+    for (final l in List<void Function()>.from(_listeners)) {
+      l();
+    }
   }
 
   Future<void> _init() async {
@@ -43,20 +60,19 @@ class ProductionLocationRepository implements LocationRepository {
             ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
           .get();
 
-      if (rows.isNotEmpty) {
-        _locations.clear();
-        for (final row in rows) {
-          _locations.add(
-            Location(
-              id: row.id,
-              name: row.name,
-              type: LocationType.fromString(row.locationType),
-              isActive: row.isActive,
-              createdAt: row.createdAt,
-            ),
-          );
-        }
+      _locations.clear();
+      for (final row in rows) {
+        _locations.add(
+          Location(
+            id: row.id,
+            name: row.name,
+            type: LocationType.fromString(row.locationType),
+            isActive: row.isActive,
+            createdAt: row.createdAt,
+          ),
+        );
       }
+      _notifyListeners();
     } catch (_) {
       // Safe fallback
     }
@@ -79,6 +95,7 @@ class ProductionLocationRepository implements LocationRepository {
     _locations.insert(0, location);
     _persistToDb(location);
     _enqueueSync(location, 'CREATE');
+    _notifyListeners();
   }
 
   @override
@@ -88,6 +105,7 @@ class ProductionLocationRepository implements LocationRepository {
       _locations[index] = location;
       _persistToDb(location);
       _enqueueSync(location, 'UPDATE');
+      _notifyListeners();
     }
   }
 
@@ -98,6 +116,7 @@ class ProductionLocationRepository implements LocationRepository {
       _locations.removeAt(index);
       _deleteFromDb(id);
       _enqueueSyncDelete(id);
+      _notifyListeners();
     }
   }
 

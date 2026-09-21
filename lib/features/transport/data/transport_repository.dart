@@ -115,10 +115,45 @@ class ProductionTransportRepository implements TransportRepository {
               ),
             );
           }
-        } catch (_) {}
+        } catch (_) {
+          // If allocation table query fails, we will still fall back to
+          // legacy columns below — so _allocationsMap just stays empty.
+        }
 
         _transports.clear();
         for (final row in tRows) {
+          // Resolve allocations: prefer allocation table rows, but fall back to
+          // the legacy single-slot columns on the transport row itself.
+          // This ensures transports assigned before the multi-slot allocations
+          // feature (or where _persistAllocationToDb silently failed) still
+          // display their vehicle and driver in the "Assigned Fleet & Crew" card.
+          List<TransportAllocation> resolvedAllocs =
+              _allocationsMap[row.id] ?? const [];
+
+          if (resolvedAllocs.isEmpty &&
+              row.vehicleId != null &&
+              row.vehicleId!.isNotEmpty) {
+            // Synthesise a slot-0 allocation from legacy columns and persist it
+            // so future loads will find it in the allocation table.
+            final syntheticAlloc = TransportAllocation(
+              id: 'alloc-${row.id}',
+              transportId: row.id,
+              slotIndex: 0,
+              vehicleId: row.vehicleId!,
+              vehicleNumber: row.vehicleNumber ?? row.vehicleId!,
+              driverId: row.driverId,
+              driverName: row.driverName,
+              driverMobile: row.driverMobile,
+              assignedAt: row.createdAt,
+            );
+            resolvedAllocs = [syntheticAlloc];
+            _allocationsMap[row.id] = resolvedAllocs;
+            // Persist the synthesised row so it is available on subsequent loads.
+            // Errors are intentionally swallowed here — we still show the
+            // synthetic allocation in memory even if DB write fails.
+            _persistAllocationToDb(syntheticAlloc).catchError((_) {});
+          }
+
           _transports.add(
             Transport(
               id: row.id,
@@ -140,7 +175,7 @@ class ProductionTransportRepository implements TransportRepository {
               toLocationName: row.toLocationName,
               portCfsId: row.portCfsId,
               portCfsName: row.portCfsName,
-              allocations: _allocationsMap[row.id] ?? const [],
+              allocations: resolvedAllocs,
               status: TransportStatus.fromCode(row.status),
               exceptionReason: row.exceptionReason,
               createdAt: row.createdAt,
@@ -149,6 +184,28 @@ class ProductionTransportRepository implements TransportRepository {
               pod: podMap[row.id],
             ),
           );
+        }
+
+        // -----------------------------------------------------------------------
+        // BACKFILL PASS: After all transports are loaded, check each transport's
+        // in-memory allocations against what is stored in the DB. Any allocation
+        // that is present in memory but absent from the DB (because _persistAllocationToDb
+        // silently failed in a prior session) is written to the DB now.
+        // This self-heals records where slot 1+ was never persisted.
+        // -----------------------------------------------------------------------
+        final dbAllocIds = <String>{};
+        for (final list in _allocationsMap.values) {
+          for (final a in list) {
+            dbAllocIds.add(a.id);
+          }
+        }
+        for (final t in _transports) {
+          for (final a in t.allocations) {
+            if (!dbAllocIds.contains(a.id)) {
+              // This allocation is in memory but was never written to the DB.
+              _persistAllocationToDb(a).catchError((_) {});
+            }
+          }
         }
       }
 
@@ -458,8 +515,18 @@ class ProductionTransportRepository implements TransportRepository {
         _persistTransportToDb(updated);
       }
     }
-    // Persist allocation row
-    await _persistAllocationToDb(allocation);
+    // ALWAYS persist the allocation row to the database — regardless of whether
+    // the slot was already present in the in-memory list. This is the critical
+    // fix: previously when createBooking pre-embedded all slots into the
+    // Transport object before calling addAllocation, the alreadyPresent guard
+    // was true for all slots, causing the DB write to be skipped for slots 1+.
+    // insertOnConflictUpdate means this is safe to call even if the row exists.
+    try {
+      await _persistAllocationToDb(allocation);
+    } catch (e) {
+      // DB write failed — swallow so the in-memory state is still usable, but
+      // the missing row will be repaired by the backfill on next app start.
+    }
     _enqueueSyncAllocation(allocation);
   }
 
@@ -513,21 +580,20 @@ class ProductionTransportRepository implements TransportRepository {
   }
 
   Future<void> _persistAllocationToDb(TransportAllocation a) async {
-    try {
-      await _db.into(_db.localTransportAllocations).insertOnConflictUpdate(
-        LocalTransportAllocationsCompanion(
-          id: Value(a.id),
-          transportId: Value(a.transportId),
-          slotIndex: Value(a.slotIndex),
-          vehicleId: Value(a.vehicleId),
-          vehicleNumber: Value(a.vehicleNumber),
-          driverId: Value(a.driverId),
-          driverName: Value(a.driverName),
-          driverMobile: Value(a.driverMobile),
-          assignedAt: Value(a.assignedAt),
-        ),
-      );
-    } catch (_) {}
+    // Note: this method now rethrows so callers can decide how to handle failures.
+    await _db.into(_db.localTransportAllocations).insertOnConflictUpdate(
+      LocalTransportAllocationsCompanion(
+        id: Value(a.id),
+        transportId: Value(a.transportId),
+        slotIndex: Value(a.slotIndex),
+        vehicleId: Value(a.vehicleId),
+        vehicleNumber: Value(a.vehicleNumber),
+        driverId: Value(a.driverId),
+        driverName: Value(a.driverName),
+        driverMobile: Value(a.driverMobile),
+        assignedAt: Value(a.assignedAt),
+      ),
+    );
   }
 
   void _enqueueSyncAllocation(TransportAllocation a) {

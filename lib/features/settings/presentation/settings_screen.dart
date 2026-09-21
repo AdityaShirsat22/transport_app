@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../core/auth/auth_provider.dart';
@@ -47,11 +46,9 @@ class SettingsScreen extends ConsumerWidget {
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
             onPressed: () async {
+              final authNotifier = ref.read(authProvider.notifier);
               Navigator.of(dlgCtx).pop();
-              await ref.read(authProvider.notifier).logout();
-              if (context.mounted) {
-                context.go('/login');
-              }
+              await authNotifier.logout();
             },
             child: const Text('Sign Out'),
           ),
@@ -84,14 +81,30 @@ class SettingsScreen extends ConsumerWidget {
     );
 
     if (confirmed == true && context.mounted) {
-      await ref.read(appDatabaseProvider).clearAllData();
-      await ref.read(vehicleRepositoryProvider).reloadFromDatabase();
-      await ref.read(driverRepositoryProvider).reloadFromDatabase();
-      await ref.read(partyRepositoryProvider).reloadFromDatabase();
-      await ref.read(shippingLineRepositoryProvider).reloadFromDatabase();
-      await ref.read(locationRepositoryProvider).reloadFromDatabase();
-      await ref.read(portCfsRepositoryProvider).reloadFromDatabase();
-      await ref.read(transportRepositoryProvider).reloadFromDatabase();
+      final db = ref.read(appDatabaseProvider);
+      final vehicleRepo = ref.read(vehicleRepositoryProvider);
+      final driverRepo = ref.read(driverRepositoryProvider);
+      final partyRepo = ref.read(partyRepositoryProvider);
+      final shippingLineRepo = ref.read(shippingLineRepositoryProvider);
+      final locationRepo = ref.read(locationRepositoryProvider);
+      final portCfsRepo = ref.read(portCfsRepositoryProvider);
+      final transportRepo = ref.read(transportRepositoryProvider);
+
+      await db.clearAllData();
+      if (!context.mounted) return;
+      await vehicleRepo.reloadFromDatabase();
+      if (!context.mounted) return;
+      await driverRepo.reloadFromDatabase();
+      if (!context.mounted) return;
+      await partyRepo.reloadFromDatabase();
+      if (!context.mounted) return;
+      await shippingLineRepo.reloadFromDatabase();
+      if (!context.mounted) return;
+      await locationRepo.reloadFromDatabase();
+      if (!context.mounted) return;
+      await portCfsRepo.reloadFromDatabase();
+      if (!context.mounted) return;
+      await transportRepo.reloadFromDatabase();
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -267,16 +280,33 @@ class SettingsScreen extends ConsumerWidget {
                         onPressed: syncState.isSyncing
                             ? null
                             : () async {
-                                final count = await ref.read(syncEngineProvider.notifier).restoreFromCloud();
+                                final syncEngine = ref.read(syncEngineProvider.notifier);
+                                final vehicleRepo = ref.read(vehicleRepositoryProvider);
+                                final driverRepo = ref.read(driverRepositoryProvider);
+                                final partyRepo = ref.read(partyRepositoryProvider);
+                                final shippingLineRepo = ref.read(shippingLineRepositoryProvider);
+                                final locationRepo = ref.read(locationRepositoryProvider);
+                                final portCfsRepo = ref.read(portCfsRepositoryProvider);
+                                final transportRepo = ref.read(transportRepositoryProvider);
+
+                                final count = await syncEngine.restoreFromCloud();
+                                if (!context.mounted) return;
 
                                 // Reload every repository's in-memory cache from SQLite
-                                await ref.read(vehicleRepositoryProvider).reloadFromDatabase();
-                                await ref.read(driverRepositoryProvider).reloadFromDatabase();
-                                await ref.read(partyRepositoryProvider).reloadFromDatabase();
-                                await ref.read(shippingLineRepositoryProvider).reloadFromDatabase();
-                                await ref.read(locationRepositoryProvider).reloadFromDatabase();
-                                await ref.read(portCfsRepositoryProvider).reloadFromDatabase();
-                                await ref.read(transportRepositoryProvider).reloadFromDatabase();
+                                await vehicleRepo.reloadFromDatabase();
+                                if (!context.mounted) return;
+                                await driverRepo.reloadFromDatabase();
+                                if (!context.mounted) return;
+                                await partyRepo.reloadFromDatabase();
+                                if (!context.mounted) return;
+                                await shippingLineRepo.reloadFromDatabase();
+                                if (!context.mounted) return;
+                                await locationRepo.reloadFromDatabase();
+                                if (!context.mounted) return;
+                                await portCfsRepo.reloadFromDatabase();
+                                if (!context.mounted) return;
+                                await transportRepo.reloadFromDatabase();
+                                if (!context.mounted) return;
 
                                 // Notify every ViewModel so the UI rebuilds
                                 ref.read(vehicleViewModelProvider.notifier).loadVehicles();

@@ -47,7 +47,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 3;
+  int get schemaVersion => 4;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -73,7 +73,14 @@ class AppDatabase extends _$AppDatabase {
               'driver_mobile TEXT, assigned_at INTEGER NOT NULL);',
             );
           } catch (_) {}
-          // Migrate existing transport rows that have a vehicle_id into slot-0 allocations
+          // v3 / v4 migration: backfill slot-0 allocations from legacy transport columns.
+          // For transports that have vehicle_id set but no row in local_transport_allocations,
+          // create a synthetic slot-0 allocation so those transports show their assigned
+          // vehicle/driver in the Fleet & Crew card.
+          // NOTE: Only slot-0 can be recovered here because slots 1+ were only stored
+          // in the allocations table (which is what we are repairing). Any slot 1+
+          // records that were lost due to the silent-catch bug cannot be recovered
+          // from the DB — they must be re-assigned manually from Transport Details.
           try {
             await customStatement(
               'INSERT OR IGNORE INTO local_transport_allocations '

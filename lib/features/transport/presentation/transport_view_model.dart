@@ -257,6 +257,11 @@ class TransportViewModel extends StateNotifier<TransportState> {
         ? TransportStatus.driverAssigned
         : TransportStatus.bookingCreated;
 
+    // Create the transport WITHOUT pre-embedding allocations.
+    // We add allocations one-by-one via _repo.addAllocation below,
+    // which correctly handles both in-memory update AND DB persistence for
+    // every slot. Pre-embedding caused the alreadyPresent guard in addAllocation
+    // to skip DB writes for slots 1+.
     final transport = Transport(
       id: transportId,
       bookingNumber: bookingNumber,
@@ -277,7 +282,7 @@ class TransportViewModel extends StateNotifier<TransportState> {
       toLocationName: toLocationName,
       portCfsId: portCfsId,
       portCfsName: portCfsName,
-      allocations: resolvedAllocations,
+      allocations: const [], // intentionally empty; slots added below
       status: initialStatus,
       createdAt: now,
       updatedAt: now,
@@ -285,7 +290,8 @@ class TransportViewModel extends StateNotifier<TransportState> {
 
     _repo.add(transport);
 
-    // Persist each allocation and mark vehicles/drivers ON_TRIP
+    // Persist each allocation and mark vehicles/drivers ON_TRIP.
+    // addAllocation appends to in-memory AND writes to DB for every slot.
     for (final alloc in resolvedAllocations) {
       await _repo.addAllocation(alloc);
       _assignmentService.assignSpecific(
@@ -315,7 +321,7 @@ class TransportViewModel extends StateNotifier<TransportState> {
           transportId: transport.id,
           title: 'Vehicle & Driver Assigned (Slot ${alloc.slotIndex + 1})',
           description:
-              'Vehicle ${alloc.vehicleNumber}${alloc.driverName != null ? " • Driver ${alloc.driverName}" : ""}',
+              'Vehicle ${alloc.vehicleNumber}${alloc.driverName != null ? " \u2022 Driver ${alloc.driverName}" : ""}',
           timestamp: now,
         ),
       );
@@ -325,8 +331,10 @@ class TransportViewModel extends StateNotifier<TransportState> {
     onFleetChanged?.call();
     _autoSync();
 
+    // Return the transport with its final allocations as they now exist in memory
+    final persisted = _repo.getById(transportId) ?? transport;
     return BookingCreationOutcome(
-      transport: transport,
+      transport: persisted,
       wasAssigned: resolvedAllocations.isNotEmpty,
       notificationLog: null,
     );

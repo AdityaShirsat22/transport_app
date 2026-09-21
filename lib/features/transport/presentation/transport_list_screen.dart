@@ -11,6 +11,7 @@ import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/page_header.dart';
 import '../../../core/widgets/responsive_layout.dart';
 import '../../../core/widgets/status_badge.dart';
+import '../../../core/auth/auth_provider.dart';
 import '../domain/transport_model.dart';
 import 'transport_view_model.dart';
 
@@ -23,9 +24,10 @@ class TransportListScreen extends ConsumerWidget {
     final notifier = ref.read(transportViewModelProvider.notifier);
     final transports = state.filteredTransports;
     final isMobile = ResponsiveLayout.isMobile(context);
+    final isCoordinator = ref.watch(authProvider).user?.role == 'Coordinator';
 
     return Scaffold(
-      floatingActionButton: isMobile
+      floatingActionButton: isMobile && !isCoordinator
           ? FloatingActionButton.extended(
               onPressed: () => context.go('/transport/create'),
               icon: const Icon(Icons.add),
@@ -42,11 +44,12 @@ class TransportListScreen extends ConsumerWidget {
                 title: 'Transport Operations',
                 subtitle: 'Active shipments, container assignments, fleet dispatching, and status monitoring',
                 actions: [
-                  AppButton(
-                    text: 'New Booking',
-                    icon: Icons.add,
-                    onPressed: () => context.go('/transport/create'),
-                  ),
+                  if (!isCoordinator)
+                    AppButton(
+                      text: 'New Booking',
+                      icon: Icons.add,
+                      onPressed: () => context.go('/transport/create'),
+                    ),
                 ],
               )
             else
@@ -128,8 +131,8 @@ class TransportListScreen extends ConsumerWidget {
               EmptyState(
                 title: 'No Transport Bookings Found',
                 message: 'No active transports match your active filters.',
-                actionLabel: 'Create New Booking',
-                onAction: () => context.go('/transport/create'),
+                actionLabel: isCoordinator ? null : 'Create New Booking',
+                onAction: isCoordinator ? null : () => context.go('/transport/create'),
               )
             else if (isMobile)
               ListView.separated(
@@ -139,7 +142,7 @@ class TransportListScreen extends ConsumerWidget {
                 separatorBuilder: (context, index) => const SizedBox(height: 12),
                 itemBuilder: (ctx, i) {
                   final t = transports[i];
-                  return _buildTransportCard(context, ref, t);
+                  return _buildTransportCard(context, ref, t, isCoordinator);
                 },
               )
             else
@@ -152,18 +155,18 @@ class TransportListScreen extends ConsumerWidget {
                     child: DataTable(
                       headingRowColor: WidgetStateProperty.all(AppColors.surfaceMuted),
                       showCheckboxColumn: false,
-                      columns: const [
-                        DataColumn(label: Text('Transport ID', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('Booking No', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('Container No', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('Customer', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('Size / Type', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('Vehicle', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('Driver', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('Route', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('Created Date', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
+                      columns: [
+                        const DataColumn(label: Text('Transport ID', style: TextStyle(fontWeight: FontWeight.bold))),
+                        const DataColumn(label: Text('Booking No', style: TextStyle(fontWeight: FontWeight.bold))),
+                        const DataColumn(label: Text('Container No', style: TextStyle(fontWeight: FontWeight.bold))),
+                        const DataColumn(label: Text('Customer', style: TextStyle(fontWeight: FontWeight.bold))),
+                        const DataColumn(label: Text('Size / Type', style: TextStyle(fontWeight: FontWeight.bold))),
+                        const DataColumn(label: Text('Vehicle', style: TextStyle(fontWeight: FontWeight.bold))),
+                        const DataColumn(label: Text('Driver', style: TextStyle(fontWeight: FontWeight.bold))),
+                        const DataColumn(label: Text('Route', style: TextStyle(fontWeight: FontWeight.bold))),
+                        const DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                        const DataColumn(label: Text('Created Date', style: TextStyle(fontWeight: FontWeight.bold))),
+                        DataColumn(label: Text(isCoordinator ? 'View' : 'Actions', style: const TextStyle(fontWeight: FontWeight.bold))),
                       ],
                       rows: transports.map((t) {
                         return DataRow(
@@ -207,11 +210,17 @@ class TransportListScreen extends ConsumerWidget {
                             DataCell(StatusBadge.fromTransport(t.status)),
                             DataCell(Text(DateFormatter.formatShortDate(t.createdAt), style: AppTextStyles.bodySmall)),
                             DataCell(
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.red),
-                                tooltip: 'Delete Transport',
-                                onPressed: () => _confirmDeleteTransport(context, ref, t),
-                              ),
+                              isCoordinator
+                                  ? IconButton(
+                                      icon: const Icon(Icons.chevron_right, size: 20, color: AppColors.accent),
+                                      tooltip: 'View Details',
+                                      onPressed: () => context.go('/transport/${t.id}'),
+                                    )
+                                  : IconButton(
+                                      icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.red),
+                                      tooltip: 'Delete Transport',
+                                      onPressed: () => _confirmDeleteTransport(context, ref, t),
+                                    ),
                             ),
                           ],
                         );
@@ -227,7 +236,7 @@ class TransportListScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildTransportCard(BuildContext context, WidgetRef ref, Transport t) {
+  Widget _buildTransportCard(BuildContext context, WidgetRef ref, Transport t, bool isCoordinator) {
     return AppCard(
       onTap: () => context.go('/transport/${t.id}'),
       padding: const EdgeInsets.all(14),
@@ -319,11 +328,12 @@ class TransportListScreen extends ConsumerWidget {
               Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  IconButton(
-                    icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.red),
-                    tooltip: 'Delete Transport',
-                    onPressed: () => _confirmDeleteTransport(context, ref, t),
-                  ),
+                  if (!isCoordinator)
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.red),
+                      tooltip: 'Delete Transport',
+                      onPressed: () => _confirmDeleteTransport(context, ref, t),
+                    ),
                   const SizedBox(width: 4),
                   const Text(
                     'Details',
