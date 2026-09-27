@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../core/auth/auth_provider.dart';
-import '../../features/attendance/presentation/attendance_screen.dart';
 import '../../features/auth/presentation/forgot_password_screen.dart';
 import '../../features/auth/presentation/login_screen.dart';
 import '../../features/dashboard/presentation/dashboard_screen.dart';
+import '../../features/drivers/presentation/driver_coming_soon_screen.dart';
 import '../../features/drivers/presentation/driver_list_screen.dart';
 import '../../features/locations/presentation/location_list_screen.dart';
 import '../../features/masters/presentation/masters_hub_screen.dart';
@@ -59,16 +59,26 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       if (!authState.isInitialized) return null;
 
       final isAuth = authState.isAuthenticated;
-      final isLoginRoute = state.matchedLocation == '/login' || state.matchedLocation == '/forgot-password';
+      final isPublicRoute = state.matchedLocation == '/login' ||
+          state.matchedLocation == '/forgot-password' ||
+          state.matchedLocation == '/driver-coming-soon';
 
-      if (!isAuth && !isLoginRoute) {
+      if (!isAuth && !isPublicRoute) {
         return '/login';
       }
       if (isAuth) {
         final role = authState.user?.role;
         final isCoordinator = role == 'Coordinator';
+        final isDriver = role == 'Driver';
 
-        if (isLoginRoute) {
+        if (isDriver) {
+          if (state.matchedLocation != '/driver-coming-soon') {
+            return '/driver-coming-soon';
+          }
+          return null;
+        }
+
+        if (state.matchedLocation == '/login' || state.matchedLocation == '/forgot-password') {
           if (isCoordinator) {
             final lastRoute = authService.getCachedLastRoute();
             if (lastRoute != null && _isCoordinatorPermittedRoute(lastRoute)) {
@@ -77,7 +87,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             return '/transport';
           }
           final lastRoute = authService.getCachedLastRoute();
-          return (lastRoute != null && lastRoute.isNotEmpty) ? lastRoute : '/dashboard';
+          return (lastRoute != null &&
+                  lastRoute.isNotEmpty &&
+                  lastRoute != '/attendance' &&
+                  lastRoute != '/driver-coming-soon')
+              ? lastRoute
+              : '/dashboard';
         }
 
         if (isCoordinator && !_isCoordinatorPermittedRoute(state.matchedLocation)) {
@@ -99,8 +114,12 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         builder: (context, state) => const ForgotPasswordScreen(),
       ),
       GoRoute(
+        path: '/driver-coming-soon',
+        builder: (context, state) => const DriverComingSoonScreen(),
+      ),
+      GoRoute(
         path: '/attendance',
-        builder: (context, state) => const AttendanceScreen(),
+        redirect: (context, state) => '/dashboard',
       ),
       ShellRoute(
         navigatorKey: _shellNavigatorKey,

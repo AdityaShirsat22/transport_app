@@ -5,6 +5,7 @@ import 'package:pinput/pinput.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../core/auth/auth_provider.dart';
+import '../../../core/config/env_config.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_text_field.dart';
@@ -13,11 +14,6 @@ enum LoginRole {
   superAdmin,
   coordinator,
   driver,
-}
-
-enum SuperAdminOption {
-  operations,
-  attendance,
 }
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -29,11 +25,10 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   LoginRole _selectedRole = LoginRole.superAdmin;
-  SuperAdminOption _adminOption = SuperAdminOption.operations;
 
   // Form controllers for Operations Login
   final _formKey = GlobalKey<FormState>();
-  final _emailCtrl = TextEditingController(text: 'admin@freightops.com');
+  final _emailCtrl = TextEditingController(text: EnvConfig.adminEmail);
   final _passwordCtrl = TextEditingController(text: 'admin123');
   bool _obscurePassword = true;
 
@@ -54,14 +49,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   void _switchRole(LoginRole role) {
     setState(() {
       _selectedRole = role;
-      _pinError = null;
-      _pinController.clear();
-    });
-  }
-
-  void _switchAdminOption(SuperAdminOption option) {
-    setState(() {
-      _adminOption = option;
       _pinError = null;
       _pinController.clear();
     });
@@ -94,9 +81,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       LoginRole.driver => 'Driver',
     };
 
-    final isAttendance = _selectedRole == LoginRole.superAdmin &&
-        _adminOption == SuperAdminOption.attendance;
-
     final success = await ref.read(authProvider.notifier).loginWithPin(
           pin: pin,
           role: roleName,
@@ -105,18 +89,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     if (!mounted) return;
 
     if (success) {
-      if (isAttendance) {
-        await ref.read(authServiceProvider).saveAttendanceSession(role: roleName);
-        if (mounted) {
-          context.go('/attendance');
-        }
-      } else {
-        context.go('/dashboard');
-      }
+      context.go('/dashboard');
     } else {
       final authState = ref.read(authProvider);
       setState(() {
-        _pinError = authState.errorMessage ?? 'Invalid PIN. Enter 1170 for demo.';
+        _pinError = authState.errorMessage ?? 'Invalid PIN. Please try again.';
         _pinController.clear();
       });
       _pinFocusNode.requestFocus();
@@ -262,12 +239,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     isLoading: authState.isLoading,
                   ),
                 ] else ...[
-                  _buildPinLoginSection(
-                    title: 'Driver Portal Access',
-                    subtitle: 'Enter your 4-digit Driver PIN to view assigned trips and container deliveries.',
-                    icon: Icons.badge_outlined,
-                    isLoading: authState.isLoading,
-                  ),
+                  _buildDriverComingSoonSection(),
                 ],
               ],
             ),
@@ -331,152 +303,62 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   Widget _buildSuperAdminSection(bool isLoading) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        // Two Sub-Options for Super Admin: Transport Operations vs Attendance Section
-        Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: const Color(0xFF0F172A),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: const Color(0xFF334155)),
+    return Form(
+      key: _formKey,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          AppTextField(
+            label: 'Email Address',
+            controller: _emailCtrl,
+            hint: EnvConfig.adminEmail,
+            keyboardType: TextInputType.emailAddress,
+            prefixIcon: Icons.email_outlined,
+            validator: (val) {
+              if (val == null || val.trim().isEmpty) return 'Email is required';
+              if (!val.contains('@')) return 'Enter a valid email';
+              return null;
+            },
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: _buildSubOptionButton(
-                  option: SuperAdminOption.operations,
-                  title: 'Transport Operations',
-                  icon: Icons.local_shipping_outlined,
-                  isSelected: _adminOption == SuperAdminOption.operations,
-                ),
+          const SizedBox(height: 16),
+          AppTextField(
+            label: 'Password',
+            controller: _passwordCtrl,
+            obscureText: _obscurePassword,
+            prefixIcon: Icons.lock_outline,
+            suffixIcon: IconButton(
+              icon: Icon(
+                _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                size: 20,
+                color: const Color(0xFF94A3B8),
               ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: _buildSubOptionButton(
-                  option: SuperAdminOption.attendance,
-                  title: 'Attendance Section',
-                  icon: Icons.fingerprint,
-                  isSelected: _adminOption == SuperAdminOption.attendance,
-                ),
-              ),
-            ],
+              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+            ),
+            validator: (val) {
+              if (val == null || val.isEmpty) return 'Password is required';
+              if (val.length < 6) return 'Password must be at least 6 characters';
+              return null;
+            },
           ),
-        ),
-        const SizedBox(height: 24),
-
-        // Sub Option 1: Existing Operations Login (Email & Password)
-        if (_adminOption == SuperAdminOption.operations) ...[
-          Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                AppTextField(
-                  label: 'Email Address',
-                  controller: _emailCtrl,
-                  hint: 'admin@freightops.com',
-                  keyboardType: TextInputType.emailAddress,
-                  prefixIcon: Icons.email_outlined,
-                  validator: (val) {
-                    if (val == null || val.trim().isEmpty) return 'Email is required';
-                    if (!val.contains('@')) return 'Enter a valid email';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-                AppTextField(
-                  label: 'Password',
-                  controller: _passwordCtrl,
-                  obscureText: _obscurePassword,
-                  prefixIcon: Icons.lock_outline,
-                  suffixIcon: IconButton(
-                    icon: Icon(
-                      _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
-                      size: 20,
-                      color: const Color(0xFF94A3B8),
-                    ),
-                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
-                  ),
-                  validator: (val) {
-                    if (val == null || val.isEmpty) return 'Password is required';
-                    if (val.length < 6) return 'Password must be at least 6 characters';
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: () => context.push('/forgot-password'),
-                    child: const Text(
-                      'Forgot Password?',
-                      style: TextStyle(color: AppColors.accentLight, fontSize: 13),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                AppButton(
-                  text: 'Sign In to Operations',
-                  icon: Icons.login,
-                  isLoading: isLoading,
-                  onPressed: _handleOperationsLogin,
-                ),
-              ],
+          const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerRight,
+            child: TextButton(
+              onPressed: () => context.push('/forgot-password'),
+              child: const Text(
+                'Forgot Password?',
+                style: TextStyle(color: AppColors.accentLight, fontSize: 13),
+              ),
             ),
           ),
-        ] else ...[
-          // Sub Option 2: Attendance Section (4-digit PIN)
-          _buildPinLoginSection(
-            title: 'Attendance Section Access',
-            subtitle: 'Enter 4-digit Security PIN to access the Staff Attendance system.',
-            icon: Icons.fingerprint,
+          const SizedBox(height: 16),
+          AppButton(
+            text: 'Sign In to Operations',
+            icon: Icons.login,
             isLoading: isLoading,
+            onPressed: _handleOperationsLogin,
           ),
         ],
-      ],
-    );
-  }
-
-  Widget _buildSubOptionButton({
-    required SuperAdminOption option,
-    required String title,
-    required IconData icon,
-    required bool isSelected,
-  }) {
-    return InkWell(
-      onTap: () => _switchAdminOption(option),
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF334155) : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              icon,
-              size: 16,
-              color: isSelected ? AppColors.accentLight : const Color(0xFF94A3B8),
-            ),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                title,
-                style: TextStyle(
-                  color: isSelected ? Colors.white : const Color(0xFF94A3B8),
-                  fontSize: 12,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -562,35 +444,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             ),
           ],
         ),
-        const SizedBox(height: 20),
-
-        // Demo PIN Helper Badge
-        Center(
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppColors.accent.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.accent.withValues(alpha: 0.3)),
-            ),
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.key, color: AppColors.accentLight, size: 14),
-                SizedBox(width: 6),
-                Text(
-                  'Demo PIN: 1170',
-                  style: TextStyle(
-                    color: AppColors.accentLight,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 24),
 
         // 4-Digit Pinput Widget
         Center(
@@ -631,12 +485,131 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
         // Enter PIN Button
         AppButton(
-          text: _selectedRole == LoginRole.superAdmin && _adminOption == SuperAdminOption.attendance
-              ? 'Access Attendance System'
-              : 'Sign In with PIN',
+          text: 'Sign In with PIN',
           icon: Icons.lock_open,
           isLoading: isLoading,
           onPressed: () => _handlePinSubmit(_pinController.text),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDriverComingSoonSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Center icon badge with glow
+        Center(
+          child: Container(
+            width: 68,
+            height: 68,
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFFF59E0B), Color(0xFFD97706)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.amber.withValues(alpha: 0.35),
+                  blurRadius: 18,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: const Icon(Icons.badge_outlined, color: Colors.white, size: 34),
+          ),
+        ),
+        const SizedBox(height: 14),
+
+        // Coming Soon Tag
+        Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+            decoration: BoxDecoration(
+              color: AppColors.amber.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: AppColors.amber.withValues(alpha: 0.4)),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.hourglass_top, color: AppColors.amber, size: 13),
+                SizedBox(width: 6),
+                Text(
+                  'COMING SOON',
+                  style: TextStyle(
+                    color: AppColors.amber,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+
+        // Title & Description
+        const Text(
+          'Driver Mobile App',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          'The dedicated companion app for fleet drivers is under active development. Drivers will soon receive dispatches, report live status, and upload e-POD receipts on mobile.',
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Color(0xFF94A3B8),
+            fontSize: 12.5,
+            height: 1.45,
+          ),
+        ),
+        const SizedBox(height: 18),
+
+        // Feature Highlights
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: const Color(0xFF0F172A),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFF334155)),
+          ),
+          child: Column(
+            children: [
+              _buildDriverFeatureRow(Icons.local_shipping_outlined, 'Live Trip Dispatch & Queue'),
+              const SizedBox(height: 8),
+              _buildDriverFeatureRow(Icons.navigation_outlined, 'Turn-by-Turn CFS & Port Navigation'),
+              const SizedBox(height: 8),
+              _buildDriverFeatureRow(Icons.camera_alt_outlined, 'Digital e-POD & Seal Photo Upload'),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDriverFeatureRow(IconData icon, String label) {
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: AppColors.accentLight),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 12,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
         ),
       ],
     );

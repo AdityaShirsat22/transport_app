@@ -15,17 +15,20 @@ class EnvConfig {
       supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 
   /// Default admin email
-  static const String adminEmail = 'admin@freightops.com';
+  static const String adminEmail = String.fromEnvironment(
+    'ADMIN_EMAIL',
+    defaultValue: 'Sandeepgarje9011@gmail.com',
+  );
 
   /// Operational office contacts for communication fallbacks
   static const String officePhone = String.fromEnvironment(
     'OFFICE_PHONE',
-    defaultValue: '917769964872',
+    defaultValue: '919137478077',
   );
 
   static const String officeEmail = String.fromEnvironment(
     'OFFICE_EMAIL',
-    defaultValue: 'adityashirsat1170@gmail.com',
+    defaultValue: 'Sandeepgarje9011@gmail.com',
   );
 
   /// REST API Base URL

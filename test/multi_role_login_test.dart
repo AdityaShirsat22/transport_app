@@ -13,75 +13,40 @@ void main() {
     GoogleFonts.config.allowRuntimeFetching = false;
   });
 
-  group('AuthService PIN Login Unit Tests', () {
-    final authService = AuthService();
+  group('AuthService Session Tests', () {
+    test('Session route persists and clears correctly', () async {
+      SharedPreferences.setMockInitialValues({});
+      final authService = AuthService();
 
-    test('Valid PIN 1170 succeeds for Super Admin', () async {
-      final user = await authService.loginWithPin(pin: '1170', role: 'Super Admin');
-      expect(user.role, equals('Super Admin'));
-      expect(user.name, isNotEmpty);
+      await authService.saveLastRoute('/dashboard');
+      expect(authService.getCachedLastRoute(), equals('/dashboard'));
+
+      await authService.clearLastRoute();
+      expect(authService.getCachedLastRoute(), isNull);
     });
 
-    test('Valid PIN 1170 succeeds for Coordinator', () async {
-      final user = await authService.loginWithPin(pin: '1170', role: 'Coordinator');
-      expect(user.role, equals('Coordinator'));
-      expect(user.name, equals('Operations Coordinator'));
+    test('Sign out clears cached last route', () async {
+      SharedPreferences.setMockInitialValues({});
+      final authService = AuthService();
+
+      await authService.saveLastRoute('/transport');
+      expect(authService.getCachedLastRoute(), equals('/transport'));
+
+      await authService.signOut();
+      expect(authService.getCachedLastRoute(), isNull);
     });
 
-    test('Valid PIN 1170 succeeds for Driver', () async {
-      final user = await authService.loginWithPin(pin: '1170', role: 'Driver');
-      expect(user.role, equals('Driver'));
-      expect(user.name, equals('Fleet Driver'));
-    });
-
-    test('Incorrect PIN throws friendly Exception', () async {
+    test('PIN login requires Supabase connection (throws offline error)', () async {
+      final authService = AuthService();
       expect(
-        () => authService.loginWithPin(pin: '0000', role: 'Driver'),
+        () => authService.loginWithPin(pin: '1234', role: 'Coordinator'),
         throwsA(isA<Exception>()),
       );
-    });
-
-    test('Session and route persist across screens and survive app restart', () async {
-      SharedPreferences.setMockInitialValues({});
-      await authService.loginWithPin(pin: '1170', role: 'Super Admin');
-      await authService.saveLastRoute('/attendance');
-
-      expect(authService.getCachedLastRoute(), equals('/attendance'));
-
-      final restoredService = AuthService();
-      final restoredUser = await restoredService.restoreSession();
-
-      expect(restoredUser, isNotNull);
-      expect(restoredUser!.role, equals('Super Admin'));
-      expect(restoredService.getCachedLastRoute(), equals('/attendance'));
-
-      await restoredService.signOut();
-      expect(restoredService.getCachedLastRoute(), isNull);
-      final afterSignOutUser = await restoredService.restoreSession();
-      expect(afterSignOutUser, isNull);
-    });
-
-    test('Attendance session storage writes, reads, and clears reliably', () async {
-      SharedPreferences.setMockInitialValues({});
-      expect(await authService.hasActiveAttendanceSession(), isFalse);
-
-      await authService.saveAttendanceSession(role: 'Super Admin');
-      expect(await authService.hasActiveAttendanceSession(), isTrue);
-      expect(authService.isAttendanceSessionActive, isTrue);
-
-      final details = await authService.getAttendanceSessionDetails();
-      expect(details, isNotNull);
-      expect(details!['isUnlocked'], isTrue);
-      expect(details['role'], equals('Super Admin'));
-
-      await authService.clearAttendanceSession();
-      expect(await authService.hasActiveAttendanceSession(), isFalse);
-      expect(authService.isAttendanceSessionActive, isFalse);
     });
   });
 
   group('LoginScreen Multi-Role UI Tests', () {
-    testWidgets('Displays role tabs and toggles between Super Admin, Coordinator, and Driver', (tester) async {
+    testWidgets('Displays role tabs and correct sections per role', (tester) async {
       tester.view.physicalSize = const Size(1280, 800);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -97,40 +62,32 @@ void main() {
 
       await tester.pump(const Duration(milliseconds: 200));
 
-      // Check role tabs
       expect(find.text('Super Admin'), findsWidgets);
       expect(find.text('Coordinator'), findsOneWidget);
       expect(find.text('Driver'), findsOneWidget);
 
-      // Default Super Admin shows Transport Operations & Attendance Section
-      expect(find.text('Transport Operations'), findsOneWidget);
-      expect(find.text('Attendance Section'), findsOneWidget);
+      // Super Admin: email/password form, no attendance section
       expect(find.text('Email Address'), findsOneWidget);
       expect(find.text('Password'), findsOneWidget);
+      expect(find.text('Attendance Section'), findsNothing);
+      expect(find.text('Attendance Section Access'), findsNothing);
 
-      // Switch to Attendance Section under Super Admin
-      await tester.tap(find.text('Attendance Section'));
-      await tester.pump(const Duration(milliseconds: 200));
-
-      expect(find.text('Attendance Section Access'), findsOneWidget);
-      expect(find.text('Demo PIN: 1170'), findsOneWidget);
-      expect(find.byType(Pinput), findsOneWidget);
-
-      // Switch to Coordinator role
+      // Coordinator: PIN input, no demo PIN hint
       await tester.tap(find.text('Coordinator'));
       await tester.pump(const Duration(milliseconds: 200));
 
       expect(find.text('Coordinator Portal Access'), findsOneWidget);
-      expect(find.text('Demo PIN: 1170'), findsOneWidget);
+      expect(find.text('Demo PIN: 1170'), findsNothing);
       expect(find.byType(Pinput), findsOneWidget);
 
-      // Switch to Driver role
+      // Driver: Coming Soon, no PIN
       await tester.tap(find.text('Driver'));
       await tester.pump(const Duration(milliseconds: 200));
 
-      expect(find.text('Driver Portal Access'), findsOneWidget);
-      expect(find.text('Demo PIN: 1170'), findsOneWidget);
-      expect(find.byType(Pinput), findsOneWidget);
+      expect(find.text('Driver Mobile App'), findsOneWidget);
+      expect(find.text('COMING SOON'), findsOneWidget);
+      expect(find.text('View Driver App Preview'), findsNothing);
+      expect(find.byType(Pinput), findsNothing);
     });
   });
 }
