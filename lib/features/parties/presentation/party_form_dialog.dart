@@ -112,16 +112,12 @@ class _PartyFormDialogState extends State<PartyFormDialog> {
           ),
           const SizedBox(height: 14),
           AppTextField(
-            label: 'Email Address',
+            label: 'Email Address (Optional)',
             hint: 'e.g. logistics@client.com',
             controller: _emailController,
             keyboardType: TextInputType.emailAddress,
-            isRequired: true,
             validator: (val) {
-              if (val == null || val.trim().isEmpty) {
-                return 'Email is required';
-              }
-              if (!val.contains('@')) {
+              if (val != null && val.trim().isNotEmpty && !val.contains('@')) {
                 return 'Enter a valid email address';
               }
               return null;
@@ -129,16 +125,9 @@ class _PartyFormDialogState extends State<PartyFormDialog> {
           ),
           const SizedBox(height: 14),
           AppTextField(
-            label: 'City / Location',
+            label: 'City / Location (Optional)',
             hint: 'e.g. Mumbai, Maharashtra',
             controller: _cityController,
-            isRequired: true,
-            validator: (val) {
-              if (val == null || val.trim().isEmpty) {
-                return 'City is required';
-              }
-              return null;
-            },
           ),
           const SizedBox(height: 24),
           Row(

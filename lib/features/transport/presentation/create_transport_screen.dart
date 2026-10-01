@@ -27,8 +27,15 @@ class _AllotmentSlot {
   String? driverId;
   String? driverName;
   String? driverMobile;
+  final TextEditingController containerCtrl = TextEditingController();
+  final TextEditingController sealCtrl = TextEditingController();
 
   _AllotmentSlot();
+
+  void dispose() {
+    containerCtrl.dispose();
+    sealCtrl.dispose();
+  }
 }
 
 class CreateTransportScreen extends ConsumerStatefulWidget {
@@ -41,11 +48,9 @@ class CreateTransportScreen extends ConsumerStatefulWidget {
 class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
   final _formKey = GlobalKey<FormState>();
 
-  // Section 1: Container Details
+  // Section 1: Container Specifications
   ContainerSize _containerSize = ContainerSize.size40Ft;
   ShipmentType _shipmentType = ShipmentType.export;
-  final _containerNumberCtrl = TextEditingController();
-  final _sealNumberCtrl = TextEditingController();
 
   // Section 2: Booking Details
   String? _partyId;
@@ -109,19 +114,21 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
 
   @override
   void dispose() {
-    _containerNumberCtrl.dispose();
-    _sealNumberCtrl.dispose();
     _bookingNumberCtrl.dispose();
+    for (final slot in _allotments) {
+      slot.dispose();
+    }
     super.dispose();
   }
 
   void _clearForm() {
     _formKey.currentState?.reset();
+    for (final slot in _allotments) {
+      slot.dispose();
+    }
     setState(() {
       _containerSize = ContainerSize.size40Ft;
       _shipmentType = ShipmentType.export;
-      _containerNumberCtrl.clear();
-      _sealNumberCtrl.clear();
       _bookingNumberCtrl.text = IdGenerator.generateBookingNumber();
       _allotments.clear();
       _partyId = null;
@@ -233,8 +240,14 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
                     : _allotments
                         .asMap()
                         .entries
-                        .map((e) =>
-                            'Slot ${e.key + 1}: ${e.value.vehicleNumber ?? "-"} • ${e.value.driverName ?? "No driver"}')
+                        .map((e) {
+                          final slot = e.value;
+                          final cNum = slot.containerCtrl.text.trim();
+                          final sNum = slot.sealCtrl.text.trim();
+                          final cTxt = cNum.isNotEmpty ? ' • Cntr: $cNum' : '';
+                          final sTxt = sNum.isNotEmpty ? ' • Seal: $sNum' : '';
+                          return 'Slot ${e.key + 1}: ${slot.vehicleNumber ?? "-"} • ${slot.driverName ?? "No driver"}$cTxt$sTxt';
+                        })
                         .join('\n'),
               ),
             ],
@@ -261,6 +274,8 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
       final now = DateTime.now();
       final builtAllocations = _allotments.asMap().entries.map((e) {
         final slot = e.value;
+        final cNum = slot.containerCtrl.text.trim().toUpperCase();
+        final sNum = slot.sealCtrl.text.trim().toUpperCase();
         return TransportAllocation(
           id: 'alloc-${now.millisecondsSinceEpoch}-${e.key}',
           transportId: '', // Will be assigned the transport ID
@@ -270,6 +285,8 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
           driverId: slot.driverId,
           driverName: slot.driverName,
           driverMobile: slot.driverMobile,
+          containerNumber: cNum.isNotEmpty ? cNum : null,
+          sealNumber: sNum.isNotEmpty ? sNum : null,
           assignedAt: now,
         );
       }).toList();
@@ -277,8 +294,8 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
       final outcome = await ref.read(transportViewModelProvider.notifier).createBooking(
             containerSize: _containerSize,
             shipmentType: _shipmentType,
-            containerNumber: _containerNumberCtrl.text.trim().toUpperCase(),
-            sealNumber: _sealNumberCtrl.text.trim().toUpperCase(),
+            containerNumber: '',
+            sealNumber: '',
             partyId: _partyId!,
             partyName: _partyName!,
             partyMobile: _partyMobile ?? '',
@@ -396,7 +413,7 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // -----------------------------------------------------------------
-              // Section 1 — Container Details
+              // Section 1 — Container Specifications
               // -----------------------------------------------------------------
               AppCard(
                 child: Column(
@@ -407,13 +424,13 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
                         const Icon(Icons.inventory_2_outlined, color: AppColors.accent, size: 20),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text('Section 1 — Container Details',
+                          child: Text('Section 1 — Container Specifications',
                               style: AppTextStyles.headingSmall, overflow: TextOverflow.ellipsis),
                         ),
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text('Specify container specifications (numbers can be added now or later)',
+                    Text('Specify container size and operation type (vehicle, container & seal numbers can be assigned below in Section 4)',
                         style: AppTextStyles.bodySmall),
                     const Divider(height: 20),
                     if (isMobile) ...[
@@ -472,27 +489,6 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
                           ),
                         ],
                       ),
-                    const SizedBox(height: 14),
-                    AppTextField(
-                      label: 'Container Number',
-                      hint: 'e.g. MSCU1234567 (Optional)',
-                      controller: _containerNumberCtrl,
-                      isRequired: false,
-                      validator: (val) {
-                        if (val != null && val.trim().isNotEmpty && val.trim().length < 4) {
-                          return 'Standard container format required';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 14),
-                    AppTextField(
-                      label: 'Custom Seal Number',
-                      hint: 'e.g. SL-98234 (Optional)',
-                      controller: _sealNumberCtrl,
-                      isRequired: false,
-                      validator: (val) => null,
-                    ),
                   ],
                 ),
               ),
@@ -811,7 +807,8 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
                                     tooltip: 'Remove slot',
                                     onPressed: () {
                                       setState(() {
-                                        _allotments.removeAt(i);
+                                        final removed = _allotments.removeAt(i);
+                                        removed.dispose();
                                       });
                                     },
                                   ),
@@ -861,6 +858,22 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
                                     _allotments[i].driverMobile = selected.mobileNumber;
                                   });
                                 },
+                              ),
+                              const SizedBox(height: 12),
+                              AppTextField(
+                                label: 'Container Number (Optional for Slot #${i + 1})',
+                                hint: 'e.g. MSCU1234567',
+                                controller: _allotments[i].containerCtrl,
+                                isRequired: false,
+                                textCapitalization: TextCapitalization.characters,
+                              ),
+                              const SizedBox(height: 12),
+                              AppTextField(
+                                label: 'Custom Seal Number (Optional for Slot #${i + 1})',
+                                hint: 'e.g. SL-98234',
+                                controller: _allotments[i].sealCtrl,
+                                isRequired: false,
+                                textCapitalization: TextCapitalization.characters,
                               ),
                             ],
                           ),

@@ -12,7 +12,7 @@ abstract class DriverRepository {
   void add(Driver driver);
   void update(Driver driver);
   void updateStatus(String driverId, DriverStatus status, {String? vehicleId, String? vehicleNumber, bool clearVehicle = false});
-  void delete(String id);
+  Future<void> delete(String id);
   Future<void> reloadFromDatabase();
   void addListener(void Function() listener);
   void removeListener(void Function() listener);
@@ -59,22 +59,20 @@ class ProductionDriverRepository implements DriverRepository {
             ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
           .get();
 
-      if (rows.isNotEmpty) {
-        _drivers.clear();
-        for (final row in rows) {
-          _drivers.add(
-            Driver(
-              id: row.id,
-              name: row.name,
-              mobileNumber: row.mobileNumber,
-              status: DriverStatus.fromCode(row.status),
-              currentVehicleId: row.currentVehicleId,
-              currentVehicleNumber: row.currentVehicleNumber,
-              isActive: row.isActive,
-              createdAt: row.createdAt,
-            ),
-          );
-        }
+      _drivers.clear();
+      for (final row in rows) {
+        _drivers.add(
+          Driver(
+            id: row.id,
+            name: row.name,
+            mobileNumber: row.mobileNumber,
+            status: DriverStatus.fromCode(row.status),
+            currentVehicleId: row.currentVehicleId,
+            currentVehicleNumber: row.currentVehicleNumber,
+            isActive: row.isActive,
+            createdAt: row.createdAt,
+          ),
+        );
       }
       _notifyListeners();
     } catch (_) {
@@ -132,12 +130,12 @@ class ProductionDriverRepository implements DriverRepository {
   }
 
   @override
-  void delete(String id) {
+  Future<void> delete(String id) async {
     final index = _drivers.indexWhere((d) => d.id == id);
     if (index != -1) {
       _drivers.removeAt(index);
-      _deleteFromDb(id);
-      _enqueueSyncDelete(id);
+      await _deleteFromDb(id);
+      await _enqueueSyncDelete(id);
       _notifyListeners();
     }
   }
@@ -148,14 +146,16 @@ class ProductionDriverRepository implements DriverRepository {
     } catch (_) {}
   }
 
-  void _enqueueSyncDelete(String id) {
-    _db.enqueueSync(
-      id: 'sync-drv-del-${DateTime.now().millisecondsSinceEpoch}-$id',
-      entityType: 'driver',
-      entityId: id,
-      operation: 'DELETE',
-      payload: jsonEncode({'id': id}),
-    );
+  Future<void> _enqueueSyncDelete(String id) async {
+    try {
+      await _db.enqueueSync(
+        id: 'sync-drv-del-${DateTime.now().millisecondsSinceEpoch}-$id',
+        entityType: 'driver',
+        entityId: id,
+        operation: 'DELETE',
+        payload: jsonEncode({'id': id}),
+      );
+    } catch (_) {}
   }
 
   Future<void> _persistToDb(Driver d) async {

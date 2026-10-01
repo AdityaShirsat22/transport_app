@@ -9,14 +9,27 @@ import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/page_header.dart';
 import '../../../core/widgets/responsive_layout.dart';
 import '../../../core/widgets/status_badge.dart';
+import '../../../core/sync/sync_engine.dart';
+import '../data/vehicle_repository.dart';
 import '../domain/vehicle_model.dart';
 import 'vehicle_form_dialog.dart';
 import 'vehicle_view_model.dart';
 
-class VehicleListScreen extends ConsumerWidget {
+class VehicleListScreen extends ConsumerStatefulWidget {
   const VehicleListScreen({super.key});
 
-  void _showAddDialog(BuildContext context, WidgetRef ref) {
+  @override
+  ConsumerState<VehicleListScreen> createState() => _VehicleListScreenState();
+}
+
+class _VehicleListScreenState extends ConsumerState<VehicleListScreen> {
+  Future<void> _onRefresh() async {
+    await ref.read(syncEngineProvider.notifier).syncAll();
+    await ref.read(vehicleRepositoryProvider).reloadFromDatabase();
+    ref.read(vehicleViewModelProvider.notifier).loadVehicles();
+  }
+
+  void _showAddDialog(BuildContext context) {
     final isMobile = ResponsiveLayout.isMobile(context);
     final form = VehicleFormDialog(
       onSave: (vehNum, type, cap, status) {
@@ -51,7 +64,7 @@ class VehicleListScreen extends ConsumerWidget {
     }
   }
 
-  void _showEditDialog(BuildContext context, WidgetRef ref, Vehicle vehicle) {
+  void _showEditDialog(BuildContext context, Vehicle vehicle) {
     final isMobile = ResponsiveLayout.isMobile(context);
     final form = VehicleFormDialog(
       initialVehicle: vehicle,
@@ -81,7 +94,7 @@ class VehicleListScreen extends ConsumerWidget {
     }
   }
 
-  void _showStatusSheet(BuildContext context, WidgetRef ref, Vehicle vehicle) {
+  void _showStatusSheet(BuildContext context, Vehicle vehicle) {
     showModalBottomSheet(
       context: context,
       useSafeArea: true,
@@ -119,253 +132,7 @@ class VehicleListScreen extends ConsumerWidget {
     );
   }
 
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(vehicleViewModelProvider);
-    final notifier = ref.read(vehicleViewModelProvider.notifier);
-    final vehicles = state.filteredVehicles;
-    final isMobile = ResponsiveLayout.isMobile(context);
-
-    return Scaffold(
-      floatingActionButton: isMobile
-          ? FloatingActionButton.extended(
-              onPressed: () => _showAddDialog(context, ref),
-              icon: const Icon(Icons.add),
-              label: const Text('Add Vehicle'),
-            )
-          : null,
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(isMobile ? 16 : 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (!isMobile)
-              PageHeader(
-                title: 'Vehicle Fleet Master',
-                subtitle: 'Manage trucks, trailers, capacity, and current assignment status',
-                actions: [
-                  AppButton(
-                    text: 'Add Vehicle',
-                    icon: Icons.add,
-                    onPressed: () => _showAddDialog(context, ref),
-                  ),
-                ],
-              )
-            else
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Vehicle Fleet', style: AppTextStyles.headingMedium),
-                        const SizedBox(height: 2),
-                        Text('${vehicles.length} trucks registered', style: AppTextStyles.bodySmall),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-
-            // Search Bar
-            TextField(
-              onChanged: notifier.setSearchQuery,
-              decoration: InputDecoration(
-                hintText: 'Search number, type, driver...',
-                prefixIcon: const Icon(Icons.search, size: 20),
-                suffixIcon: state.searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 18),
-                        onPressed: () => notifier.setSearchQuery(''),
-                      )
-                    : null,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                filled: true,
-                fillColor: AppColors.surface,
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Filter Chips Strip
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  ChoiceChip(
-                    label: const Text('All Statuses'),
-                    selected: state.statusFilter == null,
-                    onSelected: (_) => notifier.setStatusFilter(null),
-                  ),
-                  const SizedBox(width: 8),
-                  ...VehicleStatus.values.map((s) {
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: FilterChip(
-                        label: Text(s.label),
-                        selected: state.statusFilter == s,
-                        onSelected: (val) => notifier.setStatusFilter(val ? s : null),
-                      ),
-                    );
-                  }),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Content List
-            if (vehicles.isEmpty)
-              const EmptyState(
-                title: 'No Vehicles Found',
-                message: 'No vehicles match your active search or filters. Try adjusting your search query.',
-              )
-            else if (isMobile)
-              ListView.separated(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                itemCount: vehicles.length,
-                separatorBuilder: (context, index) => const SizedBox(height: 10),
-                itemBuilder: (ctx, i) {
-                  final v = vehicles[i];
-                  return AppCard(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Expanded(
-                              child: Row(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(8),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.blue.withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: const Icon(Icons.local_shipping, size: 18, color: AppColors.blue),
-                                  ),
-                                  const SizedBox(width: 10),
-                                  Flexible(
-                                    child: Text(
-                                      v.vehicleNumber,
-                                      style: AppTextStyles.labelLarge.copyWith(fontWeight: FontWeight.bold),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            StatusBadge.fromVehicle(v.status),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        Text('${v.vehicleType} • Capacity: ${v.capacity}', style: AppTextStyles.bodyMedium),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Assigned Driver: ${v.assignedDriverName ?? "None (Unassigned)"}',
-                          style: AppTextStyles.bodySmall.copyWith(
-                            color: v.assignedDriverName != null ? AppColors.textPrimary : AppColors.textMuted,
-                          ),
-                        ),
-                        const Divider(height: 18),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            OutlinedButton.icon(
-                              style: OutlinedButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                                textStyle: const TextStyle(fontSize: 12),
-                              ),
-                              onPressed: () => _showStatusSheet(context, ref, v),
-                              icon: const Icon(Icons.swap_vert, size: 16),
-                              label: const Text('Status'),
-                            ),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  icon: const Icon(Icons.edit_outlined, size: 20),
-                                  tooltip: 'Edit Vehicle',
-                                  onPressed: () => _showEditDialog(context, ref, v),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.red),
-                                  tooltip: 'Delete Vehicle',
-                                  onPressed: () => _confirmDelete(context, ref, v),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              )
-            else
-              AppCard(
-                padding: EdgeInsets.zero,
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(minWidth: MediaQuery.of(context).size.width - 320),
-                    child: DataTable(
-                      headingRowColor: WidgetStateProperty.all(AppColors.surfaceMuted),
-                      showCheckboxColumn: false,
-                      columns: const [
-                        DataColumn(label: Text('Vehicle Number', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('Type', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('Capacity', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('Assigned Driver', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
-                        DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
-                      ],
-                      rows: vehicles.map((v) {
-                        return DataRow(
-                          cells: [
-                            DataCell(Text(v.vehicleNumber, style: AppTextStyles.labelLarge)),
-                            DataCell(Text(v.vehicleType, style: AppTextStyles.bodyMedium)),
-                            DataCell(Text(v.capacity, style: AppTextStyles.bodyMedium)),
-                            DataCell(Text(v.assignedDriverName ?? 'None', style: AppTextStyles.bodySmall)),
-                            DataCell(StatusBadge.fromVehicle(v.status)),
-                            DataCell(
-                              Row(
-                                children: [
-                                  IconButton(
-                                    icon: const Icon(Icons.edit_outlined, size: 18),
-                                    onPressed: () => _showEditDialog(context, ref, v),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.sync_alt, size: 18),
-                                    onPressed: () => _showStatusSheet(context, ref, v),
-                                  ),
-                                  IconButton(
-                                    icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.red),
-                                    tooltip: 'Delete Vehicle',
-                                    onPressed: () => _confirmDelete(context, ref, v),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                ),
-              ),
-            SizedBox(height: isMobile ? 80 : 20),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _confirmDelete(BuildContext context, WidgetRef ref, Vehicle v) {
+  void _confirmDelete(BuildContext context, Vehicle v) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -378,9 +145,10 @@ class VehicleListScreen extends ConsumerWidget {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
-            onPressed: () {
+            onPressed: () async {
               Navigator.of(ctx).pop();
-              final success = ref.read(vehicleViewModelProvider.notifier).deleteVehicle(v.id);
+              final success = await ref.read(vehicleViewModelProvider.notifier).deleteVehicle(v.id);
+              if (!context.mounted) return;
               if (!success) {
                 final err = ref.read(vehicleViewModelProvider).errorMessage ?? 'Cannot delete vehicle';
                 ScaffoldMessenger.of(context).showSnackBar(
@@ -395,6 +163,256 @@ class VehicleListScreen extends ConsumerWidget {
             child: const Text('Delete', style: TextStyle(color: Colors.white)),
           ),
         ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final state = ref.watch(vehicleViewModelProvider);
+    final notifier = ref.read(vehicleViewModelProvider.notifier);
+    final vehicles = state.filteredVehicles;
+    final isMobile = ResponsiveLayout.isMobile(context);
+
+    return Scaffold(
+      floatingActionButton: isMobile
+          ? FloatingActionButton.extended(
+              onPressed: () => _showAddDialog(context),
+              icon: const Icon(Icons.add),
+              label: const Text('Add Vehicle'),
+            )
+          : null,
+      body: RefreshIndicator(
+        onRefresh: _onRefresh,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.all(isMobile ? 16 : 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (!isMobile)
+                PageHeader(
+                  title: 'Vehicle Fleet Master',
+                  subtitle: 'Manage trucks, trailers, capacity, and current assignment status',
+                  actions: [
+                    AppButton(
+                      text: 'Add Vehicle',
+                      icon: Icons.add,
+                      onPressed: () => _showAddDialog(context),
+                    ),
+                  ],
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Vehicle Fleet', style: AppTextStyles.headingMedium),
+                          const SizedBox(height: 2),
+                          Text('${vehicles.length} trucks registered', style: AppTextStyles.bodySmall),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Search Bar
+              TextField(
+                onChanged: notifier.setSearchQuery,
+                decoration: InputDecoration(
+                  hintText: 'Search number, type, driver...',
+                  prefixIcon: const Icon(Icons.search, size: 20),
+                  suffixIcon: state.searchQuery.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () => notifier.setSearchQuery(''),
+                        )
+                      : null,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  filled: true,
+                  fillColor: AppColors.surface,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Filter Chips Strip
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    ChoiceChip(
+                      label: const Text('All Statuses'),
+                      selected: state.statusFilter == null,
+                      onSelected: (_) => notifier.setStatusFilter(null),
+                    ),
+                    const SizedBox(width: 8),
+                    ...VehicleStatus.values.map((s) {
+                      return Padding(
+                        padding: const EdgeInsets.only(right: 8),
+                        child: FilterChip(
+                          label: Text(s.label),
+                          selected: state.statusFilter == s,
+                          onSelected: (val) => notifier.setStatusFilter(val ? s : null),
+                        ),
+                      );
+                    }),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Content List
+              if (vehicles.isEmpty)
+                const EmptyState(
+                  title: 'No Vehicles Found',
+                  message: 'No vehicles match your active search or filters. Try adjusting your search query.',
+                )
+              else if (isMobile)
+                ListView.separated(
+                  shrinkWrap: true,
+                  physics: const NeverScrollableScrollPhysics(),
+                  itemCount: vehicles.length,
+                  separatorBuilder: (context, index) => const SizedBox(height: 10),
+                  itemBuilder: (ctx, i) {
+                    final v = vehicles[i];
+                    return AppCard(
+                      padding: const EdgeInsets.all(14),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(8),
+                                      decoration: BoxDecoration(
+                                        color: AppColors.blue.withValues(alpha: 0.1),
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Icon(Icons.local_shipping, size: 18, color: AppColors.blue),
+                                    ),
+                                    const SizedBox(width: 10),
+                                    Flexible(
+                                      child: Text(
+                                        v.vehicleNumber,
+                                        style: AppTextStyles.labelLarge.copyWith(fontWeight: FontWeight.bold),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              StatusBadge.fromVehicle(v.status),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Text('${v.vehicleType} • Capacity: ${v.capacity}', style: AppTextStyles.bodyMedium),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Assigned Driver: ${v.assignedDriverName ?? "None (Unassigned)"}',
+                            style: AppTextStyles.bodySmall.copyWith(
+                              color: v.assignedDriverName != null ? AppColors.textPrimary : AppColors.textMuted,
+                            ),
+                          ),
+                          const Divider(height: 18),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                  textStyle: const TextStyle(fontSize: 12),
+                                ),
+                                onPressed: () => _showStatusSheet(context, v),
+                                icon: const Icon(Icons.swap_vert, size: 16),
+                                label: const Text('Status'),
+                              ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: const Icon(Icons.edit_outlined, size: 20),
+                                    tooltip: 'Edit Vehicle',
+                                    onPressed: () => _showEditDialog(context, v),
+                                  ),
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, size: 20, color: AppColors.red),
+                                    tooltip: 'Delete Vehicle',
+                                    onPressed: () => _confirmDelete(context, v),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                )
+              else
+                AppCard(
+                  padding: EdgeInsets.zero,
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: ConstrainedBox(
+                      constraints: BoxConstraints(minWidth: MediaQuery.of(context).size.width - 320),
+                      child: DataTable(
+                        headingRowColor: WidgetStateProperty.all(AppColors.surfaceMuted),
+                        showCheckboxColumn: false,
+                        columns: const [
+                          DataColumn(label: Text('Vehicle Number', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Type', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Capacity', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Assigned Driver', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Status', style: TextStyle(fontWeight: FontWeight.bold))),
+                          DataColumn(label: Text('Actions', style: TextStyle(fontWeight: FontWeight.bold))),
+                        ],
+                        rows: vehicles.map((v) {
+                          return DataRow(
+                            cells: [
+                              DataCell(Text(v.vehicleNumber, style: AppTextStyles.labelLarge)),
+                              DataCell(Text(v.vehicleType, style: AppTextStyles.bodyMedium)),
+                              DataCell(Text(v.capacity, style: AppTextStyles.bodyMedium)),
+                              DataCell(Text(v.assignedDriverName ?? 'None', style: AppTextStyles.bodySmall)),
+                              DataCell(StatusBadge.fromVehicle(v.status)),
+                              DataCell(
+                                Row(
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit_outlined, size: 18),
+                                      onPressed: () => _showEditDialog(context, v),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.sync_alt, size: 18),
+                                      onPressed: () => _showStatusSheet(context, v),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.red),
+                                      tooltip: 'Delete Vehicle',
+                                      onPressed: () => _confirmDelete(context, v),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        }).toList(),
+                      ),
+                    ),
+                  ),
+                ),
+              SizedBox(height: isMobile ? 80 : 20),
+            ],
+          ),
+        ),
       ),
     );
   }

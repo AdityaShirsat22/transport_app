@@ -122,13 +122,13 @@ class DriverViewModel extends StateNotifier<DriverState> {
     _autoSync();
   }
 
-  bool deleteDriver(String id) {
+  Future<bool> deleteDriver(String id) async {
     final drv = _repo.getById(id);
     if (drv != null && (drv.status == DriverStatus.onTrip || drv.currentVehicleId != null)) {
       state = state.copyWith(errorMessage: 'Cannot deactivate driver while actively assigned to an ongoing trip.');
       return false;
     }
-    _repo.delete(id);
+    await _repo.delete(id);
     loadDrivers();
     _autoSync();
     return true;

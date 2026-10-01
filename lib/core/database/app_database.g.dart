@@ -8720,6 +8720,28 @@ class $LocalTransportAllocationsTable extends LocalTransportAllocations
     type: DriftSqlType.string,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _containerNumberMeta = const VerificationMeta(
+    'containerNumber',
+  );
+  @override
+  late final GeneratedColumn<String> containerNumber = GeneratedColumn<String>(
+    'container_number',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sealNumberMeta = const VerificationMeta(
+    'sealNumber',
+  );
+  @override
+  late final GeneratedColumn<String> sealNumber = GeneratedColumn<String>(
+    'seal_number',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _assignedAtMeta = const VerificationMeta(
     'assignedAt',
   );
@@ -8741,6 +8763,8 @@ class $LocalTransportAllocationsTable extends LocalTransportAllocations
     driverId,
     driverName,
     driverMobile,
+    containerNumber,
+    sealNumber,
     assignedAt,
   ];
   @override
@@ -8819,6 +8843,21 @@ class $LocalTransportAllocationsTable extends LocalTransportAllocations
         ),
       );
     }
+    if (data.containsKey('container_number')) {
+      context.handle(
+        _containerNumberMeta,
+        containerNumber.isAcceptableOrUnknown(
+          data['container_number']!,
+          _containerNumberMeta,
+        ),
+      );
+    }
+    if (data.containsKey('seal_number')) {
+      context.handle(
+        _sealNumberMeta,
+        sealNumber.isAcceptableOrUnknown(data['seal_number']!, _sealNumberMeta),
+      );
+    }
     if (data.containsKey('assigned_at')) {
       context.handle(
         _assignedAtMeta,
@@ -8871,6 +8910,14 @@ class $LocalTransportAllocationsTable extends LocalTransportAllocations
         DriftSqlType.string,
         data['${effectivePrefix}driver_mobile'],
       ),
+      containerNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}container_number'],
+      ),
+      sealNumber: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}seal_number'],
+      ),
       assignedAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}assigned_at'],
@@ -8894,6 +8941,8 @@ class LocalTransportAllocation extends DataClass
   final String? driverId;
   final String? driverName;
   final String? driverMobile;
+  final String? containerNumber;
+  final String? sealNumber;
   final DateTime assignedAt;
   const LocalTransportAllocation({
     required this.id,
@@ -8904,6 +8953,8 @@ class LocalTransportAllocation extends DataClass
     this.driverId,
     this.driverName,
     this.driverMobile,
+    this.containerNumber,
+    this.sealNumber,
     required this.assignedAt,
   });
   @override
@@ -8922,6 +8973,12 @@ class LocalTransportAllocation extends DataClass
     }
     if (!nullToAbsent || driverMobile != null) {
       map['driver_mobile'] = Variable<String>(driverMobile);
+    }
+    if (!nullToAbsent || containerNumber != null) {
+      map['container_number'] = Variable<String>(containerNumber);
+    }
+    if (!nullToAbsent || sealNumber != null) {
+      map['seal_number'] = Variable<String>(sealNumber);
     }
     map['assigned_at'] = Variable<DateTime>(assignedAt);
     return map;
@@ -8943,6 +9000,12 @@ class LocalTransportAllocation extends DataClass
       driverMobile: driverMobile == null && nullToAbsent
           ? const Value.absent()
           : Value(driverMobile),
+      containerNumber: containerNumber == null && nullToAbsent
+          ? const Value.absent()
+          : Value(containerNumber),
+      sealNumber: sealNumber == null && nullToAbsent
+          ? const Value.absent()
+          : Value(sealNumber),
       assignedAt: Value(assignedAt),
     );
   }
@@ -8961,6 +9024,8 @@ class LocalTransportAllocation extends DataClass
       driverId: serializer.fromJson<String?>(json['driverId']),
       driverName: serializer.fromJson<String?>(json['driverName']),
       driverMobile: serializer.fromJson<String?>(json['driverMobile']),
+      containerNumber: serializer.fromJson<String?>(json['containerNumber']),
+      sealNumber: serializer.fromJson<String?>(json['sealNumber']),
       assignedAt: serializer.fromJson<DateTime>(json['assignedAt']),
     );
   }
@@ -8976,6 +9041,8 @@ class LocalTransportAllocation extends DataClass
       'driverId': serializer.toJson<String?>(driverId),
       'driverName': serializer.toJson<String?>(driverName),
       'driverMobile': serializer.toJson<String?>(driverMobile),
+      'containerNumber': serializer.toJson<String?>(containerNumber),
+      'sealNumber': serializer.toJson<String?>(sealNumber),
       'assignedAt': serializer.toJson<DateTime>(assignedAt),
     };
   }
@@ -8989,6 +9056,8 @@ class LocalTransportAllocation extends DataClass
     Value<String?> driverId = const Value.absent(),
     Value<String?> driverName = const Value.absent(),
     Value<String?> driverMobile = const Value.absent(),
+    Value<String?> containerNumber = const Value.absent(),
+    Value<String?> sealNumber = const Value.absent(),
     DateTime? assignedAt,
   }) => LocalTransportAllocation(
     id: id ?? this.id,
@@ -8999,6 +9068,10 @@ class LocalTransportAllocation extends DataClass
     driverId: driverId.present ? driverId.value : this.driverId,
     driverName: driverName.present ? driverName.value : this.driverName,
     driverMobile: driverMobile.present ? driverMobile.value : this.driverMobile,
+    containerNumber: containerNumber.present
+        ? containerNumber.value
+        : this.containerNumber,
+    sealNumber: sealNumber.present ? sealNumber.value : this.sealNumber,
     assignedAt: assignedAt ?? this.assignedAt,
   );
   LocalTransportAllocation copyWithCompanion(
@@ -9021,6 +9094,12 @@ class LocalTransportAllocation extends DataClass
       driverMobile: data.driverMobile.present
           ? data.driverMobile.value
           : this.driverMobile,
+      containerNumber: data.containerNumber.present
+          ? data.containerNumber.value
+          : this.containerNumber,
+      sealNumber: data.sealNumber.present
+          ? data.sealNumber.value
+          : this.sealNumber,
       assignedAt: data.assignedAt.present
           ? data.assignedAt.value
           : this.assignedAt,
@@ -9038,6 +9117,8 @@ class LocalTransportAllocation extends DataClass
           ..write('driverId: $driverId, ')
           ..write('driverName: $driverName, ')
           ..write('driverMobile: $driverMobile, ')
+          ..write('containerNumber: $containerNumber, ')
+          ..write('sealNumber: $sealNumber, ')
           ..write('assignedAt: $assignedAt')
           ..write(')'))
         .toString();
@@ -9053,6 +9134,8 @@ class LocalTransportAllocation extends DataClass
     driverId,
     driverName,
     driverMobile,
+    containerNumber,
+    sealNumber,
     assignedAt,
   );
   @override
@@ -9067,6 +9150,8 @@ class LocalTransportAllocation extends DataClass
           other.driverId == this.driverId &&
           other.driverName == this.driverName &&
           other.driverMobile == this.driverMobile &&
+          other.containerNumber == this.containerNumber &&
+          other.sealNumber == this.sealNumber &&
           other.assignedAt == this.assignedAt);
 }
 
@@ -9080,6 +9165,8 @@ class LocalTransportAllocationsCompanion
   final Value<String?> driverId;
   final Value<String?> driverName;
   final Value<String?> driverMobile;
+  final Value<String?> containerNumber;
+  final Value<String?> sealNumber;
   final Value<DateTime> assignedAt;
   final Value<int> rowid;
   const LocalTransportAllocationsCompanion({
@@ -9091,6 +9178,8 @@ class LocalTransportAllocationsCompanion
     this.driverId = const Value.absent(),
     this.driverName = const Value.absent(),
     this.driverMobile = const Value.absent(),
+    this.containerNumber = const Value.absent(),
+    this.sealNumber = const Value.absent(),
     this.assignedAt = const Value.absent(),
     this.rowid = const Value.absent(),
   });
@@ -9103,6 +9192,8 @@ class LocalTransportAllocationsCompanion
     this.driverId = const Value.absent(),
     this.driverName = const Value.absent(),
     this.driverMobile = const Value.absent(),
+    this.containerNumber = const Value.absent(),
+    this.sealNumber = const Value.absent(),
     required DateTime assignedAt,
     this.rowid = const Value.absent(),
   }) : id = Value(id),
@@ -9120,6 +9211,8 @@ class LocalTransportAllocationsCompanion
     Expression<String>? driverId,
     Expression<String>? driverName,
     Expression<String>? driverMobile,
+    Expression<String>? containerNumber,
+    Expression<String>? sealNumber,
     Expression<DateTime>? assignedAt,
     Expression<int>? rowid,
   }) {
@@ -9132,6 +9225,8 @@ class LocalTransportAllocationsCompanion
       if (driverId != null) 'driver_id': driverId,
       if (driverName != null) 'driver_name': driverName,
       if (driverMobile != null) 'driver_mobile': driverMobile,
+      if (containerNumber != null) 'container_number': containerNumber,
+      if (sealNumber != null) 'seal_number': sealNumber,
       if (assignedAt != null) 'assigned_at': assignedAt,
       if (rowid != null) 'rowid': rowid,
     });
@@ -9146,6 +9241,8 @@ class LocalTransportAllocationsCompanion
     Value<String?>? driverId,
     Value<String?>? driverName,
     Value<String?>? driverMobile,
+    Value<String?>? containerNumber,
+    Value<String?>? sealNumber,
     Value<DateTime>? assignedAt,
     Value<int>? rowid,
   }) {
@@ -9158,6 +9255,8 @@ class LocalTransportAllocationsCompanion
       driverId: driverId ?? this.driverId,
       driverName: driverName ?? this.driverName,
       driverMobile: driverMobile ?? this.driverMobile,
+      containerNumber: containerNumber ?? this.containerNumber,
+      sealNumber: sealNumber ?? this.sealNumber,
       assignedAt: assignedAt ?? this.assignedAt,
       rowid: rowid ?? this.rowid,
     );
@@ -9190,6 +9289,12 @@ class LocalTransportAllocationsCompanion
     if (driverMobile.present) {
       map['driver_mobile'] = Variable<String>(driverMobile.value);
     }
+    if (containerNumber.present) {
+      map['container_number'] = Variable<String>(containerNumber.value);
+    }
+    if (sealNumber.present) {
+      map['seal_number'] = Variable<String>(sealNumber.value);
+    }
     if (assignedAt.present) {
       map['assigned_at'] = Variable<DateTime>(assignedAt.value);
     }
@@ -9210,6 +9315,8 @@ class LocalTransportAllocationsCompanion
           ..write('driverId: $driverId, ')
           ..write('driverName: $driverName, ')
           ..write('driverMobile: $driverMobile, ')
+          ..write('containerNumber: $containerNumber, ')
+          ..write('sealNumber: $sealNumber, ')
           ..write('assignedAt: $assignedAt, ')
           ..write('rowid: $rowid')
           ..write(')'))
@@ -13738,6 +13845,8 @@ typedef $$LocalTransportAllocationsTableCreateCompanionBuilder =
       Value<String?> driverId,
       Value<String?> driverName,
       Value<String?> driverMobile,
+      Value<String?> containerNumber,
+      Value<String?> sealNumber,
       required DateTime assignedAt,
       Value<int> rowid,
     });
@@ -13751,6 +13860,8 @@ typedef $$LocalTransportAllocationsTableUpdateCompanionBuilder =
       Value<String?> driverId,
       Value<String?> driverName,
       Value<String?> driverMobile,
+      Value<String?> containerNumber,
+      Value<String?> sealNumber,
       Value<DateTime> assignedAt,
       Value<int> rowid,
     });
@@ -13801,6 +13912,16 @@ class $$LocalTransportAllocationsTableFilterComposer
 
   ColumnFilters<String> get driverMobile => $composableBuilder(
     column: $table.driverMobile,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get containerNumber => $composableBuilder(
+    column: $table.containerNumber,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sealNumber => $composableBuilder(
+    column: $table.sealNumber,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -13859,6 +13980,16 @@ class $$LocalTransportAllocationsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get containerNumber => $composableBuilder(
+    column: $table.containerNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sealNumber => $composableBuilder(
+    column: $table.sealNumber,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get assignedAt => $composableBuilder(
     column: $table.assignedAt,
     builder: (column) => ColumnOrderings(column),
@@ -13903,6 +14034,16 @@ class $$LocalTransportAllocationsTableAnnotationComposer
 
   GeneratedColumn<String> get driverMobile => $composableBuilder(
     column: $table.driverMobile,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get containerNumber => $composableBuilder(
+    column: $table.containerNumber,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get sealNumber => $composableBuilder(
+    column: $table.sealNumber,
     builder: (column) => column,
   );
 
@@ -13966,6 +14107,8 @@ class $$LocalTransportAllocationsTableTableManager
                 Value<String?> driverId = const Value.absent(),
                 Value<String?> driverName = const Value.absent(),
                 Value<String?> driverMobile = const Value.absent(),
+                Value<String?> containerNumber = const Value.absent(),
+                Value<String?> sealNumber = const Value.absent(),
                 Value<DateTime> assignedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
               }) => LocalTransportAllocationsCompanion(
@@ -13977,6 +14120,8 @@ class $$LocalTransportAllocationsTableTableManager
                 driverId: driverId,
                 driverName: driverName,
                 driverMobile: driverMobile,
+                containerNumber: containerNumber,
+                sealNumber: sealNumber,
                 assignedAt: assignedAt,
                 rowid: rowid,
               ),
@@ -13990,6 +14135,8 @@ class $$LocalTransportAllocationsTableTableManager
                 Value<String?> driverId = const Value.absent(),
                 Value<String?> driverName = const Value.absent(),
                 Value<String?> driverMobile = const Value.absent(),
+                Value<String?> containerNumber = const Value.absent(),
+                Value<String?> sealNumber = const Value.absent(),
                 required DateTime assignedAt,
                 Value<int> rowid = const Value.absent(),
               }) => LocalTransportAllocationsCompanion.insert(
@@ -14001,6 +14148,8 @@ class $$LocalTransportAllocationsTableTableManager
                 driverId: driverId,
                 driverName: driverName,
                 driverMobile: driverMobile,
+                containerNumber: containerNumber,
+                sealNumber: sealNumber,
                 assignedAt: assignedAt,
                 rowid: rowid,
               ),

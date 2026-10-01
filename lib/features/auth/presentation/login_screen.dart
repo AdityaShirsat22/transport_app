@@ -5,16 +5,11 @@ import 'package:pinput/pinput.dart';
 import '../../../app/theme/app_colors.dart';
 import '../../../app/theme/app_text_styles.dart';
 import '../../../core/auth/auth_provider.dart';
-import '../../../core/config/env_config.dart';
 import '../../../core/constants/app_constants.dart';
 import '../../../core/widgets/app_button.dart';
 import '../../../core/widgets/app_text_field.dart';
 
-enum LoginRole {
-  superAdmin,
-  coordinator,
-  driver,
-}
+enum LoginRole { superAdmin, coordinator, driver }
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -28,8 +23,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   // Form controllers for Operations Login
   final _formKey = GlobalKey<FormState>();
-  final _emailCtrl = TextEditingController(text: EnvConfig.adminEmail);
-  final _passwordCtrl = TextEditingController(text: 'admin123');
+  final _emailCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
   bool _obscurePassword = true;
 
   // PIN controllers
@@ -57,10 +52,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Future<void> _handleOperationsLogin() async {
     if (!_formKey.currentState!.validate()) return;
 
-    final success = await ref.read(authProvider.notifier).login(
-          _emailCtrl.text.trim(),
-          _passwordCtrl.text,
-        );
+    final success = await ref
+        .read(authProvider.notifier)
+        .login(_emailCtrl.text.trim(), _passwordCtrl.text);
 
     if (success && mounted) {
       context.go('/dashboard');
@@ -81,10 +75,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       LoginRole.driver => 'Driver',
     };
 
-    final success = await ref.read(authProvider.notifier).loginWithPin(
-          pin: pin,
-          role: roleName,
-        );
+    final success = await ref
+        .read(authProvider.notifier)
+        .loginWithPin(pin: pin, role: roleName);
 
     if (!mounted) return;
 
@@ -147,7 +140,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                         ),
                       ],
                     ),
-                    child: const Icon(Icons.local_shipping, color: Colors.white, size: 34),
+                    child: const Icon(
+                      Icons.local_shipping,
+                      color: Colors.white,
+                      size: 34,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 14),
@@ -211,16 +208,25 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     decoration: BoxDecoration(
                       color: AppColors.red.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: AppColors.red.withValues(alpha: 0.4)),
+                      border: Border.all(
+                        color: AppColors.red.withValues(alpha: 0.4),
+                      ),
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.error_outline, color: AppColors.red, size: 20),
+                        const Icon(
+                          Icons.error_outline,
+                          color: AppColors.red,
+                          size: 20,
+                        ),
                         const SizedBox(width: 10),
                         Expanded(
                           child: Text(
                             authState.errorMessage!,
-                            style: const TextStyle(color: Colors.white, fontSize: 13),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
                       ],
@@ -234,7 +240,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ] else if (_selectedRole == LoginRole.coordinator) ...[
                   _buildPinLoginSection(
                     title: 'Coordinator Portal Access',
-                    subtitle: 'Enter your 4-digit Coordinator PIN to access dispatch and fleet queue.',
+                    subtitle:
+                        'Enter your 4-digit Coordinator PIN to access dispatch and fleet queue.',
                     icon: Icons.assignment_ind_outlined,
                     isLoading: authState.isLoading,
                   ),
@@ -311,7 +318,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           AppTextField(
             label: 'Email Address',
             controller: _emailCtrl,
-            hint: EnvConfig.adminEmail,
+            hint: "Enter your email id",
             keyboardType: TextInputType.emailAddress,
             prefixIcon: Icons.email_outlined,
             validator: (val) {
@@ -323,20 +330,26 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           const SizedBox(height: 16),
           AppTextField(
             label: 'Password',
+            hint: "enter your password",
             controller: _passwordCtrl,
             obscureText: _obscurePassword,
             prefixIcon: Icons.lock_outline,
             suffixIcon: IconButton(
               icon: Icon(
-                _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                _obscurePassword
+                    ? Icons.visibility_outlined
+                    : Icons.visibility_off_outlined,
                 size: 20,
                 color: const Color(0xFF94A3B8),
               ),
-              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+              onPressed: () =>
+                  setState(() => _obscurePassword = !_obscurePassword),
             ),
             validator: (val) {
               if (val == null || val.isEmpty) return 'Password is required';
-              if (val.length < 6) return 'Password must be at least 6 characters';
+              if (val.length < 6) {
+                return 'Password must be at least 6 characters';
+              }
               return null;
             },
           ),
@@ -474,7 +487,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           Center(
             child: Text(
               _pinError!,
-              style: const TextStyle(color: AppColors.red, fontSize: 13, fontWeight: FontWeight.w500),
+              style: const TextStyle(
+                color: AppColors.red,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
               textAlign: TextAlign.center,
             ),
           ),
@@ -518,7 +535,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
               ],
             ),
-            child: const Icon(Icons.badge_outlined, color: Colors.white, size: 34),
+            child: const Icon(
+              Icons.badge_outlined,
+              color: Colors.white,
+              size: 34,
+            ),
           ),
         ),
         const SizedBox(height: 14),
@@ -584,11 +605,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           ),
           child: Column(
             children: [
-              _buildDriverFeatureRow(Icons.local_shipping_outlined, 'Live Trip Dispatch & Queue'),
+              _buildDriverFeatureRow(
+                Icons.local_shipping_outlined,
+                'Live Trip Dispatch & Queue',
+              ),
               const SizedBox(height: 8),
-              _buildDriverFeatureRow(Icons.navigation_outlined, 'Turn-by-Turn CFS & Port Navigation'),
+              _buildDriverFeatureRow(
+                Icons.navigation_outlined,
+                'Turn-by-Turn CFS & Port Navigation',
+              ),
               const SizedBox(height: 8),
-              _buildDriverFeatureRow(Icons.camera_alt_outlined, 'Digital e-POD & Seal Photo Upload'),
+              _buildDriverFeatureRow(
+                Icons.camera_alt_outlined,
+                'Digital e-POD & Seal Photo Upload',
+              ),
             ],
           ),
         ),

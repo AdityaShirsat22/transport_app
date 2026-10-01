@@ -9,6 +9,8 @@ class TransportAllocation {
   final String? driverId;
   final String? driverName;
   final String? driverMobile;
+  final String? containerNumber; // optional – per-slot container number
+  final String? sealNumber; // optional – per-slot seal number
   final DateTime assignedAt;
 
   const TransportAllocation({
@@ -20,6 +22,8 @@ class TransportAllocation {
     this.driverId,
     this.driverName,
     this.driverMobile,
+    this.containerNumber,
+    this.sealNumber,
     required this.assignedAt,
   });
 
@@ -32,6 +36,8 @@ class TransportAllocation {
     String? driverId,
     String? driverName,
     String? driverMobile,
+    String? containerNumber,
+    String? sealNumber,
     DateTime? assignedAt,
   }) {
     return TransportAllocation(
@@ -43,6 +49,8 @@ class TransportAllocation {
       driverId: driverId ?? this.driverId,
       driverName: driverName ?? this.driverName,
       driverMobile: driverMobile ?? this.driverMobile,
+      containerNumber: containerNumber ?? this.containerNumber,
+      sealNumber: sealNumber ?? this.sealNumber,
       assignedAt: assignedAt ?? this.assignedAt,
     );
   }
@@ -56,6 +64,8 @@ class TransportAllocation {
         'driver_id': driverId,
         'driver_name': driverName,
         'driver_mobile': driverMobile,
+        'container_number': containerNumber,
+        'seal_number': sealNumber,
         'assigned_at': assignedAt.toIso8601String(),
       };
 
@@ -69,6 +79,8 @@ class TransportAllocation {
         driverId: json['driver_id'] as String?,
         driverName: json['driver_name'] as String?,
         driverMobile: json['driver_mobile'] as String?,
+        containerNumber: json['container_number'] as String?,
+        sealNumber: json['seal_number'] as String?,
         assignedAt: DateTime.parse(json['assigned_at'] as String),
       );
 }

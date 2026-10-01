@@ -102,116 +102,7 @@ class TransportDetailsScreen extends ConsumerWidget {
     );
   }
 
-  void _showEditContainerSealSheet(BuildContext context, WidgetRef ref, Transport transport) {
-    final containerCtrl = TextEditingController(text: transport.containerNumber);
-    final sealCtrl = TextEditingController(text: transport.sealNumber);
-    final formKey = GlobalKey<FormState>();
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      useSafeArea: true,
-      builder: (sheetCtx) => Padding(
-        padding: EdgeInsets.only(
-          left: 20,
-          right: 20,
-          top: 16,
-          bottom: MediaQuery.of(sheetCtx).viewInsets.bottom + 24,
-        ),
-        child: Form(
-          key: formKey,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      'Edit Container & Seal Details',
-                      style: AppTextStyles.headingSmall,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, size: 20),
-                    onPressed: () => Navigator.of(sheetCtx).pop(),
-                  ),
-                ],
-              ),
-              const Divider(height: 16),
-              Text(
-                'Update container number and seal number for booking ${transport.bookingNumber}.',
-                style: AppTextStyles.bodySmall,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: containerCtrl,
-                textCapitalization: TextCapitalization.characters,
-                decoration: const InputDecoration(
-                  labelText: 'Container Number',
-                  hintText: 'e.g. MSCU1234567',
-                  prefixIcon: Icon(Icons.inventory_2_outlined, size: 18),
-                ),
-                validator: (val) {
-                  if (val != null && val.trim().isNotEmpty && val.trim().length < 4) {
-                    return 'Container number must be at least 4 characters';
-                  }
-                  return null;
-                },
-              ),
-              const SizedBox(height: 14),
-              TextFormField(
-                controller: sealCtrl,
-                textCapitalization: TextCapitalization.characters,
-                decoration: const InputDecoration(
-                  labelText: 'Custom Seal Number',
-                  hintText: 'e.g. SL-98234',
-                  prefixIcon: Icon(Icons.lock_outline, size: 18),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.of(sheetCtx).pop(),
-                      child: const Text('Cancel'),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.save_outlined, size: 18),
-                      label: const Text('Save Changes'),
-                      onPressed: () {
-                        if (!formKey.currentState!.validate()) return;
-                        Navigator.of(sheetCtx).pop();
-                        ref.read(transportViewModelProvider.notifier).updateContainerAndSeal(
-                              transportId: transport.id,
-                              containerNumber: containerCtrl.text,
-                              sealNumber: sealCtrl.text,
-                            );
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Container & seal details updated successfully!'),
-                              backgroundColor: AppColors.green,
-                            ),
-                          );
-                        }
-                      },
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   void _showCompleteSheet(BuildContext context, WidgetRef ref, Transport transport) {
     showModalBottomSheet(
@@ -570,6 +461,8 @@ class TransportDetailsScreen extends ConsumerWidget {
     String? selectedDriverId;
     String? selectedDriverName;
     String? selectedDriverMobile;
+    final containerCtrl = TextEditingController();
+    final sealCtrl = TextEditingController();
 
     showModalBottomSheet(
       context: context,
@@ -603,113 +496,293 @@ class TransportDetailsScreen extends ConsumerWidget {
                 top: 16,
                 bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
               ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Add Allotment (Slot #${transport.allocations.length + 1})',
-                          style: AppTextStyles.headingSmall,
-                          overflow: TextOverflow.ellipsis,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Add Allotment (Slot #${transport.allocations.length + 1})',
+                            style: AppTextStyles.headingSmall,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 20),
-                        onPressed: () => Navigator.of(sheetCtx).pop(),
-                      ),
-                    ],
-                  ),
-                  const Divider(height: 16),
-                  const SizedBox(height: 8),
-                  SearchableSelectField<String>(
-                    label: 'Vehicle (Required)',
-                    hint: 'Select available vehicle',
-                    value: selectedVehicleId,
-                    selectedDisplay: selectedVehicleNumber,
-                    isRequired: true,
-                    items: availableVehicles.map((v) {
-                      return SearchableSelectItem(
-                        value: v.id,
-                        title: v.vehicleNumber,
-                        subtitle: '${v.vehicleType} • ${v.capacity} • ${v.status.label}',
-                      );
-                    }).toList(),
-                    onSelected: (id) {
-                      final v = availableVehicles.firstWhere((x) => x.id == id);
-                      setSheetState(() {
-                        selectedVehicleId = id;
-                        selectedVehicleNumber = v.vehicleNumber;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 14),
-                  SearchableSelectField<String>(
-                    label: 'Driver (Optional)',
-                    hint: 'Select driver (or leave empty)',
-                    value: selectedDriverId,
-                    selectedDisplay: selectedDriverName,
-                    isRequired: false,
-                    items: availableDrivers.map((d) {
-                      return SearchableSelectItem(
-                        value: d.id,
-                        title: d.name,
-                        subtitle: '${d.mobileNumber} • ${d.status.label}',
-                      );
-                    }).toList(),
-                    onSelected: (id) {
-                      final d = availableDrivers.firstWhere((x) => x.id == id);
-                      setSheetState(() {
-                        selectedDriverId = id;
-                        selectedDriverName = d.name;
-                        selectedDriverMobile = d.mobileNumber;
-                      });
-                    },
-                  ),
-                  const SizedBox(height: 24),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 20),
                           onPressed: () => Navigator.of(sheetCtx).pop(),
-                          child: const Text('Cancel'),
                         ),
+                      ],
+                    ),
+                    const Divider(height: 16),
+                    const SizedBox(height: 8),
+                    SearchableSelectField<String>(
+                      label: 'Vehicle (Required)',
+                      hint: 'Select available vehicle',
+                      value: selectedVehicleId,
+                      selectedDisplay: selectedVehicleNumber,
+                      isRequired: true,
+                      items: availableVehicles.map((v) {
+                        return SearchableSelectItem(
+                          value: v.id,
+                          title: v.vehicleNumber,
+                          subtitle: '${v.vehicleType} • ${v.capacity} • ${v.status.label}',
+                        );
+                      }).toList(),
+                      onSelected: (id) {
+                        final v = availableVehicles.firstWhere((x) => x.id == id);
+                        setSheetState(() {
+                          selectedVehicleId = id;
+                          selectedVehicleNumber = v.vehicleNumber;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    SearchableSelectField<String>(
+                      label: 'Driver (Optional)',
+                      hint: 'Select driver (or leave empty)',
+                      value: selectedDriverId,
+                      selectedDisplay: selectedDriverName,
+                      isRequired: false,
+                      items: availableDrivers.map((d) {
+                        return SearchableSelectItem(
+                          value: d.id,
+                          title: d.name,
+                          subtitle: '${d.mobileNumber} • ${d.status.label}',
+                        );
+                      }).toList(),
+                      onSelected: (id) {
+                        final d = availableDrivers.firstWhere((x) => x.id == id);
+                        setSheetState(() {
+                          selectedDriverId = id;
+                          selectedDriverName = d.name;
+                          selectedDriverMobile = d.mobileNumber;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: containerCtrl,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(
+                        labelText: 'Container Number (Optional)',
+                        hintText: 'e.g. MSCU1234567',
+                        prefixIcon: Icon(Icons.inventory_2_outlined, size: 18),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: selectedVehicleId == null
-                              ? null
-                              : () async {
-                                  Navigator.of(sheetCtx).pop();
-                                  await ref
-                                      .read(transportViewModelProvider.notifier)
-                                      .addAllocationToTransport(
-                                        transportId: transport.id,
-                                        vehicleId: selectedVehicleId!,
-                                        vehicleNumber: selectedVehicleNumber!,
-                                        driverId: selectedDriverId,
-                                        driverName: selectedDriverName,
-                                        driverMobile: selectedDriverMobile,
-                                      );
-                                  if (!context.mounted) return;
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                          'Added vehicle $selectedVehicleNumber to transport #${transport.id}'),
-                                      backgroundColor: AppColors.green,
-                                    ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: sealCtrl,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(
+                        labelText: 'Custom Seal Number (Optional)',
+                        hintText: 'e.g. SL-98234',
+                        prefixIcon: Icon(Icons.lock_outline, size: 18),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(sheetCtx).pop(),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: selectedVehicleId == null
+                                ? null
+                                : () async {
+                                    Navigator.of(sheetCtx).pop();
+                                    await ref
+                                        .read(transportViewModelProvider.notifier)
+                                        .addAllocationToTransport(
+                                          transportId: transport.id,
+                                          vehicleId: selectedVehicleId!,
+                                          vehicleNumber: selectedVehicleNumber!,
+                                          driverId: selectedDriverId,
+                                          driverName: selectedDriverName,
+                                          driverMobile: selectedDriverMobile,
+                                          containerNumber: containerCtrl.text.trim().toUpperCase(),
+                                          sealNumber: sealCtrl.text.trim().toUpperCase(),
+                                        );
+                                    if (!context.mounted) return;
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                            'Added vehicle $selectedVehicleNumber to transport #${transport.id}'),
+                                        backgroundColor: AppColors.green,
+                                      ),
+                                    );
+                                  },
+                            child: const Text('Confirm Allotment'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  void _showEditSlotDetailsSheet(
+    BuildContext context,
+    WidgetRef ref,
+    Transport transport,
+    TransportAllocation alloc,
+  ) {
+    final containerCtrl = TextEditingController(text: alloc.containerNumber ?? '');
+    final sealCtrl = TextEditingController(text: alloc.sealNumber ?? '');
+    String? selectedDriverId = alloc.driverId;
+    String? selectedDriverName = alloc.driverName;
+    String? selectedDriverMobile = alloc.driverMobile;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          final driverState = ref.watch(driverViewModelProvider);
+
+          // Exclude drivers allotted to other slots on this transport
+          final otherSlotDrivers = transport.allocations
+              .where((a) => a.id != alloc.id && a.driverId != null)
+              .map((a) => a.driverId!)
+              .toSet();
+
+          final availableDrivers = driverState.drivers
+              .where((d) => !otherSlotDrivers.contains(d.id) && (d.isAvailable || d.id == alloc.driverId))
+              .toList();
+
+          return SafeArea(
+            child: Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 16,
+                bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Edit Slot #${alloc.slotIndex + 1} (${alloc.vehicleNumber})',
+                            style: AppTextStyles.headingSmall,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, size: 20),
+                          onPressed: () => Navigator.of(sheetCtx).pop(),
+                        ),
+                      ],
+                    ),
+                    const Divider(height: 16),
+                    Text(
+                      'Update container, seal, or driver details for vehicle ${alloc.vehicleNumber}.',
+                      style: AppTextStyles.bodySmall,
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: containerCtrl,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(
+                        labelText: 'Container Number (Optional)',
+                        hintText: 'e.g. MSCU1234567',
+                        prefixIcon: Icon(Icons.inventory_2_outlined, size: 18),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    TextField(
+                      controller: sealCtrl,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(
+                        labelText: 'Custom Seal Number (Optional)',
+                        hintText: 'e.g. SL-98234',
+                        prefixIcon: Icon(Icons.lock_outline, size: 18),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    SearchableSelectField<String>(
+                      label: 'Driver (Optional)',
+                      hint: 'Select or change driver',
+                      value: selectedDriverId,
+                      selectedDisplay: selectedDriverName,
+                      isRequired: false,
+                      items: availableDrivers.map((d) {
+                        return SearchableSelectItem(
+                          value: d.id,
+                          title: d.name,
+                          subtitle: '${d.mobileNumber} • ${d.status.label}',
+                        );
+                      }).toList(),
+                      onSelected: (id) {
+                        final d = availableDrivers.firstWhere((x) => x.id == id);
+                        setSheetState(() {
+                          selectedDriverId = id;
+                          selectedDriverName = d.name;
+                          selectedDriverMobile = d.mobileNumber;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 24),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.of(sheetCtx).pop(),
+                            child: const Text('Cancel'),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton.icon(
+                            icon: const Icon(Icons.save_outlined, size: 18),
+                            label: const Text('Save Details'),
+                            onPressed: () async {
+                              Navigator.of(sheetCtx).pop();
+                              await ref
+                                  .read(transportViewModelProvider.notifier)
+                                  .updateAllocationDetails(
+                                    transportId: transport.id,
+                                    allocationId: alloc.id,
+                                    containerNumber: containerCtrl.text.trim().toUpperCase(),
+                                    sealNumber: sealCtrl.text.trim().toUpperCase(),
+                                    driverId: selectedDriverId,
+                                    driverName: selectedDriverName,
+                                    driverMobile: selectedDriverMobile,
                                   );
-                                },
-                          child: const Text('Confirm Allotment'),
+                              if (!context.mounted) return;
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Slot details updated successfully!'),
+                                  backgroundColor: AppColors.green,
+                                ),
+                              );
+                            },
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                ],
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           );
@@ -1021,7 +1094,7 @@ class TransportDetailsScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
 
-            // Container & Route Details
+            // Container Specifications & Route Details
             AppCard(
               padding: const EdgeInsets.all(16),
               child: Column(
@@ -1030,18 +1103,11 @@ class TransportDetailsScreen extends ConsumerWidget {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Container & Route', style: AppTextStyles.headingSmall),
-                      TextButton.icon(
-                        icon: const Icon(Icons.edit_outlined, size: 16),
-                        label: const Text('Edit Container & Seal'),
-                        onPressed: () => _showEditContainerSealSheet(context, ref, transport),
-                      ),
+                      Text('Container Specifications & Route', style: AppTextStyles.headingSmall),
                     ],
                   ),
                   const Divider(height: 16),
-                  _buildDetailRow('Container Number', transport.containerNumber.isNotEmpty ? transport.containerNumber : '— (Pending)'),
                   _buildDetailRow('Size & Type', '${transport.containerSize.label} • ${transport.shipmentType.label}'),
-                  _buildDetailRow('Custom Seal No', transport.sealNumber.isNotEmpty ? transport.sealNumber : '— (Pending)'),
                   _buildDetailRow('Customer', transport.partyName),
                   _buildDetailRow('Shipping Line', transport.shippingLineName),
                   _buildDetailRow('Origin (From)', transport.fromLocationName),
@@ -1163,7 +1229,23 @@ class TransportDetailsScreen extends ConsumerWidget {
                                   ),
                                 ),
                                 const Spacer(),
-                                if (transport.status.isActive)
+                                if (transport.status.isActive) ...[
+                                  TextButton.icon(
+                                    onPressed: () => _showEditSlotDetailsSheet(context, ref, transport, entry.value),
+                                    icon: const Icon(Icons.edit_outlined, size: 14),
+                                    label: Text(
+                                      (entry.value.containerNumber == null || entry.value.containerNumber!.isEmpty)
+                                          ? 'Add Container / Seal'
+                                          : 'Edit Slot',
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                    style: TextButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 4),
                                   IconButton(
                                     icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.red),
                                     tooltip: 'Remove slot',
@@ -1171,6 +1253,7 @@ class TransportDetailsScreen extends ConsumerWidget {
                                     constraints: const BoxConstraints(),
                                     padding: const EdgeInsets.all(4),
                                   ),
+                                ],
                               ],
                             ),
                             const SizedBox(height: 8),
@@ -1228,6 +1311,38 @@ class TransportDetailsScreen extends ConsumerWidget {
                                           entry.value.driverMobile!,
                                           style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary),
                                         ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.accent.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(Icons.inventory_2_outlined, color: AppColors.accent, size: 20),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('Container & Seal', style: AppTextStyles.bodySmall),
+                                      Text(
+                                        '${(entry.value.containerNumber != null && entry.value.containerNumber!.isNotEmpty) ? entry.value.containerNumber : "— (Pending)"}'
+                                        ' • Seal: ${(entry.value.sealNumber != null && entry.value.sealNumber!.isNotEmpty) ? entry.value.sealNumber : "— (Pending)"}',
+                                        style: AppTextStyles.labelLarge.copyWith(
+                                          fontWeight: FontWeight.bold,
+                                          color: (entry.value.containerNumber != null && entry.value.containerNumber!.isNotEmpty)
+                                              ? AppColors.textPrimary
+                                              : AppColors.textSecondary,
+                                        ),
+                                      ),
                                     ],
                                   ),
                                 ),

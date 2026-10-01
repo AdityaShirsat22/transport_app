@@ -47,7 +47,7 @@ class AppDatabase extends _$AppDatabase {
   AppDatabase.forTesting(super.executor);
 
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
@@ -91,10 +91,22 @@ class AppDatabase extends _$AppDatabase {
               'FROM local_transports WHERE vehicle_id IS NOT NULL AND vehicle_id != \'\';',
             );
           } catch (_) {}
+          // v5 migration: add container_number and seal_number columns to allocations
+          try {
+            await customStatement(
+              'ALTER TABLE local_transport_allocations ADD COLUMN container_number TEXT;',
+            );
+          } catch (_) {}
+          try {
+            await customStatement(
+              'ALTER TABLE local_transport_allocations ADD COLUMN seal_number TEXT;',
+            );
+          } catch (_) {}
         },
       );
 
   static LazyDatabase _openConnection() {
+
     return LazyDatabase(() async {
       final dbFolder = await getApplicationDocumentsDirectory();
       final file = File(p.join(dbFolder.path, 'freightops.sqlite'));

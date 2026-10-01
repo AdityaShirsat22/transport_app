@@ -13,7 +13,7 @@ abstract class VehicleRepository {
   void add(Vehicle vehicle);
   void update(Vehicle vehicle);
   void updateStatus(String vehicleId, VehicleStatus status, {String? driverId, String? driverName, bool clearDriver = false});
-  void delete(String id);
+  Future<void> delete(String id);
   Future<void> reloadFromDatabase();
   void addListener(void Function() listener);
   void removeListener(void Function() listener);
@@ -60,23 +60,21 @@ class ProductionVehicleRepository implements VehicleRepository {
             ..orderBy([(t) => OrderingTerm.desc(t.createdAt)]))
           .get();
 
-      if (rows.isNotEmpty) {
-        _vehicles.clear();
-        for (final row in rows) {
-          _vehicles.add(
-            Vehicle(
-              id: row.id,
-              vehicleNumber: row.vehicleNumber,
-              vehicleType: row.vehicleType,
-              capacity: row.capacity,
-              status: VehicleStatus.fromCode(row.status),
-              assignedDriverId: row.assignedDriverId,
-              assignedDriverName: row.assignedDriverName,
-              isActive: row.isActive,
-              createdAt: row.createdAt,
-            ),
-          );
-        }
+      _vehicles.clear();
+      for (final row in rows) {
+        _vehicles.add(
+          Vehicle(
+            id: row.id,
+            vehicleNumber: row.vehicleNumber,
+            vehicleType: row.vehicleType,
+            capacity: row.capacity,
+            status: VehicleStatus.fromCode(row.status),
+            assignedDriverId: row.assignedDriverId,
+            assignedDriverName: row.assignedDriverName,
+            isActive: row.isActive,
+            createdAt: row.createdAt,
+          ),
+        );
       }
       _notifyListeners();
     } catch (_) {
@@ -145,12 +143,12 @@ class ProductionVehicleRepository implements VehicleRepository {
   }
 
   @override
-  void delete(String id) {
+  Future<void> delete(String id) async {
     final index = _vehicles.indexWhere((v) => v.id == id);
     if (index != -1) {
       _vehicles.removeAt(index);
-      _deleteFromDb(id);
-      _enqueueSyncDelete(id);
+      await _deleteFromDb(id);
+      await _enqueueSyncDelete(id);
       _notifyListeners();
     }
   }
@@ -161,14 +159,16 @@ class ProductionVehicleRepository implements VehicleRepository {
     } catch (_) {}
   }
 
-  void _enqueueSyncDelete(String id) {
-    _db.enqueueSync(
-      id: 'sync-veh-del-${DateTime.now().millisecondsSinceEpoch}-$id',
-      entityType: 'vehicle',
-      entityId: id,
-      operation: 'DELETE',
-      payload: jsonEncode({'id': id}),
-    );
+  Future<void> _enqueueSyncDelete(String id) async {
+    try {
+      await _db.enqueueSync(
+        id: 'sync-veh-del-${DateTime.now().millisecondsSinceEpoch}-$id',
+        entityType: 'vehicle',
+        entityId: id,
+        operation: 'DELETE',
+        payload: jsonEncode({'id': id}),
+      );
+    } catch (_) {}
   }
 
   Future<void> _persistToDb(Vehicle v) async {

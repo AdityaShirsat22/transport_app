@@ -163,6 +163,14 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
     }
   }
 
+  /// Bi-directional synchronization:
+  /// 1. Flushes any pending local changes/deletions to Supabase
+  /// 2. Pulls fresh cloud records into SQLite and prunes deleted records
+  Future<int> syncAll() async {
+    await syncPending();
+    return await restoreFromCloud();
+  }
+
   /// Automatic startup sync: called once on app launch when online.
   /// Fetches all cloud data into local SQLite so the UI always shows current data on restart.
   Future<void> startupSync() async {
@@ -181,7 +189,7 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
     }
 
     // Online + Supabase configured: refresh local DB from cloud
-    await restoreFromCloud();
+    await syncAll();
     state = state.copyWith(hasCompletedStartupSync: true);
   }
 
@@ -194,12 +202,50 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
     int totalRestored = 0;
 
     try {
+      // Get pending sync items so we don't delete locally created items that haven't pushed yet
+      final pendingQueue = await _db.getPendingSyncQueue();
+      final pendingVehicles = pendingQueue
+          .where((q) => q.entityType == 'vehicle' && q.operation != 'DELETE')
+          .map((q) => q.entityId)
+          .toSet();
+      final pendingDrivers = pendingQueue
+          .where((q) => q.entityType == 'driver' && q.operation != 'DELETE')
+          .map((q) => q.entityId)
+          .toSet();
+      final pendingParties = pendingQueue
+          .where((q) => q.entityType == 'party' && q.operation != 'DELETE')
+          .map((q) => q.entityId)
+          .toSet();
+      final pendingLines = pendingQueue
+          .where((q) => q.entityType == 'shipping_line' && q.operation != 'DELETE')
+          .map((q) => q.entityId)
+          .toSet();
+      final pendingLocations = pendingQueue
+          .where((q) => q.entityType == 'location' && q.operation != 'DELETE')
+          .map((q) => q.entityId)
+          .toSet();
+      final pendingPorts = pendingQueue
+          .where((q) => q.entityType == 'port_cfs' && q.operation != 'DELETE')
+          .map((q) => q.entityId)
+          .toSet();
+      final pendingTransports = pendingQueue
+          .where((q) => q.entityType == 'transport' && q.operation != 'DELETE')
+          .map((q) => q.entityId)
+          .toSet();
+      final pendingAllocs = pendingQueue
+          .where((q) => q.entityType == 'transport_allocation' && q.operation != 'DELETE')
+          .map((q) => q.entityId)
+          .toSet();
+
       // 1. Vehicles
       final vehicles = await client.from('vehicles').select();
+      final cloudVehicleIds = <String>{};
       for (final v in vehicles) {
+        final id = v['id'] as String;
+        cloudVehicleIds.add(id);
         await _db.into(_db.localVehicles).insertOnConflictUpdate(
               LocalVehiclesCompanion(
-                id: Value(v['id']),
+                id: Value(id),
                 vehicleNumber: Value(v['vehicle_number']),
                 vehicleType: Value(v['vehicle_type']),
                 capacity: Value(v['capacity']),
@@ -213,13 +259,22 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
             );
         totalRestored++;
       }
+      final keepVehicleIds = {...cloudVehicleIds, ...pendingVehicles};
+      if (keepVehicleIds.isEmpty) {
+        await _db.delete(_db.localVehicles).go();
+      } else {
+        await (_db.delete(_db.localVehicles)..where((t) => t.id.isNotIn(keepVehicleIds))).go();
+      }
 
       // 2. Drivers
       final drivers = await client.from('drivers').select();
+      final cloudDriverIds = <String>{};
       for (final d in drivers) {
+        final id = d['id'] as String;
+        cloudDriverIds.add(id);
         await _db.into(_db.localDrivers).insertOnConflictUpdate(
               LocalDriversCompanion(
-                id: Value(d['id']),
+                id: Value(id),
                 name: Value(d['name']),
                 mobileNumber: Value(d['mobile_number']),
                 status: Value(d['status']),
@@ -232,13 +287,22 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
             );
         totalRestored++;
       }
+      final keepDriverIds = {...cloudDriverIds, ...pendingDrivers};
+      if (keepDriverIds.isEmpty) {
+        await _db.delete(_db.localDrivers).go();
+      } else {
+        await (_db.delete(_db.localDrivers)..where((t) => t.id.isNotIn(keepDriverIds))).go();
+      }
 
       // 3. Parties
       final parties = await client.from('parties').select();
+      final cloudPartyIds = <String>{};
       for (final p in parties) {
+        final id = p['id'] as String;
+        cloudPartyIds.add(id);
         await _db.into(_db.localParties).insertOnConflictUpdate(
               LocalPartiesCompanion(
-                id: Value(p['id']),
+                id: Value(id),
                 partyName: Value(p['party_name']),
                 customerMobile: Value(p['customer_mobile']),
                 email: Value(p['email'] ?? ''),
@@ -250,13 +314,22 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
             );
         totalRestored++;
       }
+      final keepPartyIds = {...cloudPartyIds, ...pendingParties};
+      if (keepPartyIds.isEmpty) {
+        await _db.delete(_db.localParties).go();
+      } else {
+        await (_db.delete(_db.localParties)..where((t) => t.id.isNotIn(keepPartyIds))).go();
+      }
 
       // 4. Shipping Lines
       final lines = await client.from('shipping_lines').select();
+      final cloudLineIds = <String>{};
       for (final s in lines) {
+        final id = s['id'] as String;
+        cloudLineIds.add(id);
         await _db.into(_db.localShippingLines).insertOnConflictUpdate(
               LocalShippingLinesCompanion(
-                id: Value(s['id']),
+                id: Value(id),
                 name: Value(s['name']),
                 code: Value(s['code']),
                 isActive: Value(s['is_active'] ?? true),
@@ -266,13 +339,22 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
             );
         totalRestored++;
       }
+      final keepLineIds = {...cloudLineIds, ...pendingLines};
+      if (keepLineIds.isEmpty) {
+        await _db.delete(_db.localShippingLines).go();
+      } else {
+        await (_db.delete(_db.localShippingLines)..where((t) => t.id.isNotIn(keepLineIds))).go();
+      }
 
       // 5. Locations
       final locs = await client.from('locations').select();
+      final cloudLocIds = <String>{};
       for (final l in locs) {
+        final id = l['id'] as String;
+        cloudLocIds.add(id);
         await _db.into(_db.localLocations).insertOnConflictUpdate(
               LocalLocationsCompanion(
-                id: Value(l['id']),
+                id: Value(id),
                 name: Value(l['name']),
                 locationType: Value(l['location_type']),
                 isActive: Value(l['is_active'] ?? true),
@@ -282,13 +364,22 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
             );
         totalRestored++;
       }
+      final keepLocIds = {...cloudLocIds, ...pendingLocations};
+      if (keepLocIds.isEmpty) {
+        await _db.delete(_db.localLocations).go();
+      } else {
+        await (_db.delete(_db.localLocations)..where((t) => t.id.isNotIn(keepLocIds))).go();
+      }
 
       // 6. Ports/CFS
       final ports = await client.from('ports_cfs').select();
+      final cloudPortIds = <String>{};
       for (final pc in ports) {
+        final id = pc['id'] as String;
+        cloudPortIds.add(id);
         await _db.into(_db.localPortsCfs).insertOnConflictUpdate(
               LocalPortsCfsCompanion(
-                id: Value(pc['id']),
+                id: Value(id),
                 name: Value(pc['name']),
                 type: Value(pc['type']),
                 location: Value(pc['location']),
@@ -299,13 +390,22 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
             );
         totalRestored++;
       }
+      final keepPortIds = {...cloudPortIds, ...pendingPorts};
+      if (keepPortIds.isEmpty) {
+        await _db.delete(_db.localPortsCfs).go();
+      } else {
+        await (_db.delete(_db.localPortsCfs)..where((t) => t.id.isNotIn(keepPortIds))).go();
+      }
 
       // 7. Transports
       final transports = await client.from('transports').select();
+      final cloudTransportIds = <String>{};
       for (final t in transports) {
+        final id = t['id'] as String;
+        cloudTransportIds.add(id);
         await _db.into(_db.localTransports).insertOnConflictUpdate(
               LocalTransportsCompanion(
-                id: Value(t['id']),
+                id: Value(id),
                 transportNumber: Value(t['transport_number']),
                 bookingNumber: Value(t['booking_number']),
                 containerNumber: Value(t['container_number']),
@@ -338,6 +438,12 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
               ),
             );
         totalRestored++;
+      }
+      final keepTransportIds = {...cloudTransportIds, ...pendingTransports};
+      if (keepTransportIds.isEmpty) {
+        await _db.delete(_db.localTransports).go();
+      } else {
+        await (_db.delete(_db.localTransports)..where((t) => t.id.isNotIn(keepTransportIds))).go();
       }
 
       // 8. POD Documents
@@ -411,10 +517,13 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
       // 11. Transport Allocations
       try {
         final allocs = await client.from('transport_allocations').select();
+        final cloudAllocIds = <String>{};
         for (final a in allocs) {
+          final id = a['id'] as String;
+          cloudAllocIds.add(id);
           await _db.into(_db.localTransportAllocations).insertOnConflictUpdate(
                 LocalTransportAllocationsCompanion(
-                  id: Value(a['id'] as String),
+                  id: Value(id),
                   transportId: Value(a['transport_id'] as String),
                   slotIndex: Value((a['slot_index'] as num).toInt()),
                   vehicleId: Value(a['vehicle_id'] as String),
@@ -422,10 +531,18 @@ class SyncEngineNotifier extends StateNotifier<SyncState> {
                   driverId: Value(a['driver_id'] as String?),
                   driverName: Value(a['driver_name'] as String?),
                   driverMobile: Value(a['driver_mobile'] as String?),
+                  containerNumber: Value(a['container_number'] as String?),
+                  sealNumber: Value(a['seal_number'] as String?),
                   assignedAt: Value(DateTime.parse(a['assigned_at'] as String)),
                 ),
               );
           totalRestored++;
+        }
+        final keepAllocIds = {...cloudAllocIds, ...pendingAllocs};
+        if (keepAllocIds.isEmpty) {
+          await _db.delete(_db.localTransportAllocations).go();
+        } else {
+          await (_db.delete(_db.localTransportAllocations)..where((t) => t.id.isNotIn(keepAllocIds))).go();
         }
       } catch (_) {}
 

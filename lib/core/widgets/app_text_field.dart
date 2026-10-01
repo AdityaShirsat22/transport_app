@@ -17,6 +17,7 @@ class AppTextField extends StatelessWidget {
   final int maxLines;
   final bool isRequired;
   final bool obscureText;
+  final TextCapitalization textCapitalization;
 
   const AppTextField({
     super.key,
@@ -34,6 +35,7 @@ class AppTextField extends StatelessWidget {
     this.maxLines = 1,
     this.isRequired = false,
     this.obscureText = false,
+    this.textCapitalization = TextCapitalization.none,
   });
 
   @override
@@ -64,6 +66,7 @@ class AppTextField extends StatelessWidget {
           controller: controller,
           initialValue: initialValue,
           obscureText: obscureText,
+          textCapitalization: textCapitalization,
           validator: validator,
           onChanged: onChanged,
           keyboardType: keyboardType,

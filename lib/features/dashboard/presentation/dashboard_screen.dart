@@ -10,15 +10,32 @@ import '../../../core/widgets/kpi_card.dart';
 import '../../../core/widgets/page_header.dart';
 import '../../../core/widgets/responsive_layout.dart';
 import '../../../core/widgets/status_badge.dart';
+import '../../../core/sync/sync_engine.dart';
+import '../../transport/data/transport_repository.dart';
 import '../../transport/domain/transport_model.dart';
 import '../../transport/presentation/transport_view_model.dart';
+import '../../vehicles/data/vehicle_repository.dart';
+import '../../vehicles/presentation/vehicle_view_model.dart';
 import 'dashboard_view_model.dart';
 
-class DashboardScreen extends ConsumerWidget {
+class DashboardScreen extends ConsumerStatefulWidget {
   const DashboardScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends ConsumerState<DashboardScreen> {
+  Future<void> _onRefresh() async {
+    await ref.read(syncEngineProvider.notifier).syncAll();
+    await ref.read(transportRepositoryProvider).reloadFromDatabase();
+    await ref.read(vehicleRepositoryProvider).reloadFromDatabase();
+    ref.read(transportViewModelProvider.notifier).loadTransports();
+    ref.read(vehicleViewModelProvider.notifier).loadVehicles();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final stats = ref.watch(dashboardStatsProvider);
     final transportState = ref.watch(transportViewModelProvider);
     final recentTransports = transportState.transports.take(8).toList();
@@ -32,8 +49,11 @@ class DashboardScreen extends ConsumerWidget {
               label: const Text('New Booking'),
             )
           : null,
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(isMobile ? 16 : 24),
+      body: RefreshIndicator(
+        onRefresh: _onRefresh,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.all(isMobile ? 16 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -400,6 +420,7 @@ class DashboardScreen extends ConsumerWidget {
             SizedBox(height: isMobile ? 80 : 20), // Bottom padding for FAB and navigation bar
           ],
         ),
+      ),
       ),
     );
   }

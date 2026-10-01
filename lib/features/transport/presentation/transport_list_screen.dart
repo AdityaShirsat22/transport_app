@@ -12,14 +12,27 @@ import '../../../core/widgets/page_header.dart';
 import '../../../core/widgets/responsive_layout.dart';
 import '../../../core/widgets/status_badge.dart';
 import '../../../core/auth/auth_provider.dart';
+import '../../../core/sync/sync_engine.dart';
+import '../data/transport_repository.dart';
 import '../domain/transport_model.dart';
 import 'transport_view_model.dart';
 
-class TransportListScreen extends ConsumerWidget {
+class TransportListScreen extends ConsumerStatefulWidget {
   const TransportListScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TransportListScreen> createState() => _TransportListScreenState();
+}
+
+class _TransportListScreenState extends ConsumerState<TransportListScreen> {
+  Future<void> _onRefresh() async {
+    await ref.read(syncEngineProvider.notifier).syncAll();
+    await ref.read(transportRepositoryProvider).reloadFromDatabase();
+    ref.read(transportViewModelProvider.notifier).loadTransports();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final state = ref.watch(transportViewModelProvider);
     final notifier = ref.read(transportViewModelProvider.notifier);
     final transports = state.filteredTransports;
@@ -34,8 +47,11 @@ class TransportListScreen extends ConsumerWidget {
               label: const Text('New Booking'),
             )
           : null,
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(isMobile ? 16 : 24),
+      body: RefreshIndicator(
+        onRefresh: _onRefresh,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.all(isMobile ? 16 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -142,7 +158,7 @@ class TransportListScreen extends ConsumerWidget {
                 separatorBuilder: (context, index) => const SizedBox(height: 12),
                 itemBuilder: (ctx, i) {
                   final t = transports[i];
-                  return _buildTransportCard(context, ref, t, isCoordinator);
+                  return _buildTransportCard(context, ref, t, isCoordinator, i);
                 },
               )
             else
@@ -156,6 +172,7 @@ class TransportListScreen extends ConsumerWidget {
                       headingRowColor: WidgetStateProperty.all(AppColors.surfaceMuted),
                       showCheckboxColumn: false,
                       columns: [
+                        const DataColumn(label: Text('Sr. No', style: TextStyle(fontWeight: FontWeight.bold))),
                         const DataColumn(label: Text('Transport ID', style: TextStyle(fontWeight: FontWeight.bold))),
                         const DataColumn(label: Text('Booking No', style: TextStyle(fontWeight: FontWeight.bold))),
                         const DataColumn(label: Text('Container No', style: TextStyle(fontWeight: FontWeight.bold))),
@@ -168,10 +185,18 @@ class TransportListScreen extends ConsumerWidget {
                         const DataColumn(label: Text('Created Date', style: TextStyle(fontWeight: FontWeight.bold))),
                         DataColumn(label: Text(isCoordinator ? 'View' : 'Actions', style: const TextStyle(fontWeight: FontWeight.bold))),
                       ],
-                      rows: transports.map((t) {
+                      rows: transports.asMap().entries.map((entry) {
+                        final i = entry.key;
+                        final t = entry.value;
                         return DataRow(
                           onSelectChanged: (_) => context.go('/transport/${t.id}'),
                           cells: [
+                            DataCell(
+                              Text(
+                                '#${i + 1}',
+                                style: AppTextStyles.bodySmall.copyWith(color: AppColors.textSecondary, fontWeight: FontWeight.bold),
+                              ),
+                            ),
                             DataCell(
                               Text(
                                 t.id,
@@ -233,10 +258,11 @@ class TransportListScreen extends ConsumerWidget {
           ],
         ),
       ),
+      ),
     );
   }
 
-  Widget _buildTransportCard(BuildContext context, WidgetRef ref, Transport t, bool isCoordinator) {
+  Widget _buildTransportCard(BuildContext context, WidgetRef ref, Transport t, bool isCoordinator, int index) {
     return AppCard(
       onTap: () => context.go('/transport/${t.id}'),
       padding: const EdgeInsets.all(14),
@@ -246,9 +272,25 @@ class TransportListScreen extends ConsumerWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                t.id,
-                style: AppTextStyles.labelLarge.copyWith(color: AppColors.accent, fontWeight: FontWeight.bold),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: AppColors.accent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      '#${index + 1}',
+                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppColors.accent),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    t.id,
+                    style: AppTextStyles.labelLarge.copyWith(color: AppColors.accent, fontWeight: FontWeight.bold),
+                  ),
+                ],
               ),
               const SizedBox(width: 8),
               Flexible(

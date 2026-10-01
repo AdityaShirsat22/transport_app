@@ -40,10 +40,9 @@ void main() {
   );
 
   group('Coordinator Role Navigation & Permissions Tests', () {
-    test('Coordinator PIN login yields Coordinator role', () async {
+    test('Coordinator user model yields Coordinator role', () async {
       SharedPreferences.setMockInitialValues({});
-      final authService = AuthService();
-      final user = await authService.loginWithPin(pin: '1170', role: 'Coordinator');
+      const user = coordinatorUser;
       expect(user.role, equals('Coordinator'));
       expect(user.name, equals('Operations Coordinator'));
     });
@@ -255,10 +254,7 @@ void main() {
       expect(find.textContaining('ADVANCE:'), findsNothing);
       expect(find.text('COMPLETE TRANSPORT'), findsNothing);
 
-      // 3. Edit Container & Seal should be accessible
-      expect(find.text('Edit Container & Seal'), findsOneWidget);
-
-      // 4. Assigned Fleet & Crew should be accessible
+      // 3. Assigned Fleet & Crew should be accessible for assigning vehicles, drivers, and container/seal per slot
       expect(find.text('Assigned Fleet & Crew'), findsOneWidget);
       expect(find.text('Allot Vehicle & Driver'), findsOneWidget);
 

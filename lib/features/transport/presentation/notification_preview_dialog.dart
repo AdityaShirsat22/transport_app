@@ -59,17 +59,40 @@ class _NotificationPreviewDialogState
     final now = DateTime.now();
     final dateStr =
         '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-    final cntr =
-        (t?.containerNumber.isNotEmpty ?? false) ? t!.containerNumber : 'Pending';
-    final seal =
-        (t?.sealNumber.isNotEmpty ?? false) ? t!.sealNumber : 'Pending';
+    final allocs = t?.allocations ?? [];
+
+    String fleetSection;
+    if (allocs.isNotEmpty) {
+      fleetSection = allocs.asMap().entries.map((e) {
+        final a = e.value;
+        final c = (a.containerNumber != null && a.containerNumber!.isNotEmpty) ? a.containerNumber! : 'Pending';
+        final s = (a.sealNumber != null && a.sealNumber!.isNotEmpty) ? a.sealNumber! : 'Pending';
+        final d = a.driverName ?? 'Pending';
+        final m = (a.driverMobile != null && a.driverMobile!.isNotEmpty) ? ' (${a.driverMobile})' : '';
+        return '• *Slot ${e.key + 1}:* Vehicle: ${a.vehicleNumber} | Driver: $d$m\n  *Container:* $c | *Seal:* $s';
+      }).join('\n');
+    } else {
+      final cntr = (t?.containerNumber.isNotEmpty ?? false) ? t!.containerNumber : 'Pending';
+      final seal = (t?.sealNumber.isNotEmpty ?? false) ? t!.sealNumber : 'Pending';
+      final v = (t?.vehicleNumber != null && t!.vehicleNumber!.isNotEmpty) ? t!.vehicleNumber! : 'N/A';
+      final d = (t?.driverName != null && t!.driverName!.isNotEmpty) ? t!.driverName! : 'N/A';
+      final m = (t?.driverMobile != null && t!.driverMobile!.isNotEmpty) ? t!.driverMobile! : 'N/A';
+      fleetSection = '• *Vehicle:* $v\n• *Driver:* $d ($m)\n• *Container:* $cntr | *Seal:* $seal';
+    }
+
+    final singleCntr = allocs.isNotEmpty && allocs.first.containerNumber != null && allocs.first.containerNumber!.isNotEmpty
+        ? allocs.first.containerNumber!
+        : ((t?.containerNumber.isNotEmpty ?? false) ? t!.containerNumber : 'Pending');
+    final singleSeal = allocs.isNotEmpty && allocs.first.sealNumber != null && allocs.first.sealNumber!.isNotEmpty
+        ? allocs.first.sealNumber!
+        : ((t?.sealNumber.isNotEmpty ?? false) ? t!.sealNumber : 'Pending');
 
     switch (r) {
       case _Recipient.customer:
-        return '''🚛 *TRANSLOGIX FLEET – BOOKING CONFIRMATION*
+        return '''🚛 *BOOKING CONFIRMATION*
 ——————————————————
 
-Dear *Customer*,
+Dear *${t?.partyName ?? 'Customer'}*,
 Your container transportation booking has been successfully confirmed and scheduled!
 
 📋 *BOOKING SUMMARY:*
@@ -77,25 +100,21 @@ Your container transportation booking has been successfully confirmed and schedu
 • *Date:* $dateStr
 • *Shipping Line:* ${t?.shippingLineName ?? 'N/A'}
 • *Operation Type:* ${t?.shipmentType.label ?? 'Export'} (${t?.containerSize.label ?? '40ft'})
-• *Container No:* $cntr
-• *Seal No:* $seal
 
 🗺️ *ROUTE DETAILS:*
 • *From:* ${t?.fromLocationName ?? 'Origin'}
 • *To:* ${t?.toLocationName ?? 'Destination'}
 • *Port / CFS:* ${t?.portCfsName ?? 'N/A'}
 
-🚚 *FLEET ASSIGNED:*
-• *Vehicle:* ${t?.vehicleNumber ?? 'N/A'}
-• *Driver:* ${t?.driverName ?? 'N/A'}
-• *Driver Contact:* ${t?.driverMobile ?? 'N/A'}
+🚚 *ASSIGNED FLEET & CONTAINERS:*
+$fleetSection
 
 _For queries, please reply to this message or contact our office._
 
-*Thank you for choosing Translogix Fleet!* 🙏''';
+*Thank you!* 🙏''';
 
       case _Recipient.driver:
-        return '''🚛 *TRANSLOGIX FLEET – TRIP ASSIGNMENT*
+        return '''🚛 *TRIP ASSIGNMENT*
 ——————————————————
 
 Dear Driver,
@@ -103,8 +122,8 @@ You have been assigned a new transport trip. Please review the details below.
 
 📋 *TRIP DETAILS:*
 • *Booking No:* ${t?.bookingNumber ?? 'BK-2026-XXXX'}
-• *Container No:* $cntr
-• *Seal No:* $seal
+• *Container No:* $singleCntr
+• *Seal No:* $singleSeal
 • *Container Size:* ${t?.containerSize.label ?? '40ft'} – ${t?.shipmentType.label ?? 'Export'}
 
 🗺️ *ROUTE:*
@@ -117,10 +136,10 @@ You have been assigned a new transport trip. Please review the details below.
 
 ⚠️ _Ensure the vehicle is ready and report any issues immediately._
 
-*Safe driving! – Translogix Fleet Operations* 🙏''';
+*Safe driving!* 🙏''';
 
       case _Recipient.office:
-        return '''📋 *TRANSLOGIX FLEET – NEW BOOKING ALERT*
+        return '''📋 *NEW BOOKING ALERT*
 ——————————————————
 
 *Booking Created – Internal Reference*
@@ -130,17 +149,14 @@ You have been assigned a new transport trip. Please review the details below.
 • *Booking Party:* ${t?.bookingPartyName ?? 'N/A'}
 • *Shipping Line:* ${t?.shippingLineName ?? 'N/A'}
 • *Operation:* ${t?.shipmentType.label ?? 'Export'} (${t?.containerSize.label ?? '40ft'})
-• *Container No:* $cntr
-• *Seal No:* $seal
 
 🗺️ *ROUTE:*
 • *From:* ${t?.fromLocationName ?? 'N/A'}
 • *To:* ${t?.toLocationName ?? 'N/A'}
 • *Port / CFS:* ${t?.portCfsName ?? 'N/A'}
 
-🚚 *FLEET:*
-• *Vehicle:* ${t?.vehicleNumber ?? 'N/A'}
-• *Driver:* ${t?.driverName ?? 'N/A'} (${t?.driverMobile ?? 'N/A'})
+🚚 *ASSIGNED FLEET & CONTAINERS:*
+$fleetSection
 
 _Please update the internal records accordingly._''';
     }

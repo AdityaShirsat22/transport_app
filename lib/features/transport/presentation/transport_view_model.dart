@@ -60,7 +60,7 @@ class TransportState {
   }
 
   List<Transport> get filteredTransports {
-    return transports.where((t) {
+    final filtered = transports.where((t) {
       if (searchQuery.isNotEmpty) {
         final q = searchQuery.toLowerCase();
         final matchId = t.id.toLowerCase().contains(q);
@@ -96,6 +96,14 @@ class TransportState {
       }
       return true;
     }).toList();
+
+    // Sort by serial number descending (newest TR-XX first)
+    filtered.sort((a, b) {
+      final aNum = int.tryParse(a.id.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+      final bNum = int.tryParse(b.id.replaceAll(RegExp(r'[^0-9]'), '')) ?? 0;
+      return bNum.compareTo(aNum);
+    });
+    return filtered;
   }
 
   TransportState copyWith({
@@ -204,8 +212,8 @@ class TransportViewModel extends StateNotifier<TransportState> {
   Future<BookingCreationOutcome> createBooking({
     required ContainerSize containerSize,
     required ShipmentType shipmentType,
-    required String containerNumber,
-    required String sealNumber,
+    String containerNumber = '',
+    String sealNumber = '',
     required String partyId,
     required String partyName,
     required String partyMobile,
@@ -247,6 +255,8 @@ class TransportViewModel extends StateNotifier<TransportState> {
           driverId: driverId,
           driverName: driverName,
           driverMobile: driverMobile,
+          containerNumber: containerNumber.isNotEmpty ? containerNumber.trim().toUpperCase() : null,
+          sealNumber: sealNumber.isNotEmpty ? sealNumber.trim().toUpperCase() : null,
           assignedAt: now,
         ),
       );
@@ -257,6 +267,15 @@ class TransportViewModel extends StateNotifier<TransportState> {
         ? TransportStatus.driverAssigned
         : TransportStatus.bookingCreated;
 
+    final slot0Container = resolvedAllocations.isNotEmpty ? resolvedAllocations.first.containerNumber : null;
+    final slot0Seal = resolvedAllocations.isNotEmpty ? resolvedAllocations.first.sealNumber : null;
+    final effectiveContainer = containerNumber.trim().isNotEmpty
+        ? containerNumber.trim().toUpperCase()
+        : (slot0Container ?? '');
+    final effectiveSeal = sealNumber.trim().isNotEmpty
+        ? sealNumber.trim().toUpperCase()
+        : (slot0Seal ?? '');
+
     // Create the transport WITHOUT pre-embedding allocations.
     // We add allocations one-by-one via _repo.addAllocation below,
     // which correctly handles both in-memory update AND DB persistence for
@@ -265,8 +284,8 @@ class TransportViewModel extends StateNotifier<TransportState> {
     final transport = Transport(
       id: transportId,
       bookingNumber: bookingNumber,
-      containerNumber: containerNumber.trim().toUpperCase(),
-      sealNumber: sealNumber.trim().toUpperCase(),
+      containerNumber: effectiveContainer,
+      sealNumber: effectiveSeal,
       containerSize: containerSize,
       shipmentType: shipmentType,
       partyId: partyId,
@@ -348,12 +367,21 @@ class TransportViewModel extends StateNotifier<TransportState> {
     String? driverId,
     String? driverName,
     String? driverMobile,
+    String? containerNumber,
+    String? sealNumber,
   }) async {
     final transport = _repo.getById(transportId);
     if (transport == null) return;
     if (transport.allocations.length >= 5) return; // max 5 slots
 
     final slotIndex = transport.allocations.length;
+    final cleanContainer = (containerNumber != null && containerNumber.trim().isNotEmpty)
+        ? containerNumber.trim().toUpperCase()
+        : null;
+    final cleanSeal = (sealNumber != null && sealNumber.trim().isNotEmpty)
+        ? sealNumber.trim().toUpperCase()
+        : null;
+
     final allocation = TransportAllocation(
       id: 'alloc-${DateTime.now().millisecondsSinceEpoch}-$transportId-$slotIndex',
       transportId: transportId,
@@ -363,10 +391,20 @@ class TransportViewModel extends StateNotifier<TransportState> {
       driverId: driverId,
       driverName: driverName,
       driverMobile: driverMobile,
+      containerNumber: cleanContainer,
+      sealNumber: cleanSeal,
       assignedAt: DateTime.now(),
     );
 
     await _repo.addAllocation(allocation);
+
+    // If slot 0 and container/seal supplied, also update legacy transport columns
+    if (slotIndex == 0 && (cleanContainer != null || cleanSeal != null)) {
+      _repo.update(transport.copyWith(
+        containerNumber: cleanContainer ?? transport.containerNumber,
+        sealNumber: cleanSeal ?? transport.sealNumber,
+      ));
+    }
 
     _assignmentService.assignSpecific(
       vehicleId: vehicleId,
@@ -387,8 +425,80 @@ class TransportViewModel extends StateNotifier<TransportState> {
         transportId: transportId,
         title: 'Vehicle & Driver Assigned (Slot ${slotIndex + 1})',
         description:
-            'Vehicle $vehicleNumber${driverName != null ? " • Driver $driverName" : ""}',
+            'Vehicle $vehicleNumber${cleanContainer != null ? " • Container $cleanContainer" : ""}${cleanSeal != null ? " • Seal $cleanSeal" : ""}${driverName != null ? " • Driver $driverName" : ""}',
         timestamp: DateTime.now(),
+      ),
+    );
+
+    loadTransports();
+    onFleetChanged?.call();
+    _autoSync();
+  }
+
+  /// Update container number, seal number, and/or driver on an existing allocation slot.
+  Future<void> updateAllocationDetails({
+    required String transportId,
+    required String allocationId,
+    String? containerNumber,
+    String? sealNumber,
+    String? driverId,
+    String? driverName,
+    String? driverMobile,
+  }) async {
+    final transport = _repo.getById(transportId);
+    if (transport == null) return;
+    final allocIndex = transport.allocations.indexWhere((a) => a.id == allocationId);
+    if (allocIndex == -1) return;
+    final currentAlloc = transport.allocations[allocIndex];
+
+    final cleanContainer = (containerNumber != null && containerNumber.trim().isNotEmpty)
+        ? containerNumber.trim().toUpperCase()
+        : null;
+    final cleanSeal = (sealNumber != null && sealNumber.trim().isNotEmpty)
+        ? sealNumber.trim().toUpperCase()
+        : null;
+
+    // Handle driver change if specified
+    if (driverId != null && driverId != currentAlloc.driverId) {
+      if (currentAlloc.driverId != null && currentAlloc.driverId!.isNotEmpty) {
+        _assignmentService.releaseDriver(currentAlloc.driverId!, transportId: transportId);
+      }
+      _assignmentService.assignSpecific(
+        vehicleId: currentAlloc.vehicleId,
+        vehicleNumber: currentAlloc.vehicleNumber,
+        driverId: driverId,
+        driverName: driverName,
+        transportId: transportId,
+      );
+    }
+
+    final updatedAlloc = currentAlloc.copyWith(
+      containerNumber: cleanContainer,
+      sealNumber: cleanSeal,
+      driverId: driverId ?? currentAlloc.driverId,
+      driverName: driverName ?? currentAlloc.driverName,
+      driverMobile: driverMobile ?? currentAlloc.driverMobile,
+    );
+
+    await _repo.updateAllocation(updatedAlloc);
+
+    // If slot 0, also keep transport legacy container/seal updated
+    if (updatedAlloc.slotIndex == 0 && (cleanContainer != null || cleanSeal != null)) {
+      _repo.update(transport.copyWith(
+        containerNumber: cleanContainer ?? transport.containerNumber,
+        sealNumber: cleanSeal ?? transport.sealNumber,
+      ));
+    }
+
+    final now = DateTime.now();
+    _repo.addActivityLog(
+      ActivityLog(
+        id: 'act-${now.millisecondsSinceEpoch}-alloc-edit-${updatedAlloc.slotIndex}',
+        transportId: transportId,
+        title: 'Slot #${updatedAlloc.slotIndex + 1} Details Updated',
+        description:
+            'Vehicle ${updatedAlloc.vehicleNumber}${cleanContainer != null ? " • Container $cleanContainer" : ""}${cleanSeal != null ? " • Seal $cleanSeal" : ""}${updatedAlloc.driverName != null ? " • Driver ${updatedAlloc.driverName}" : ""}',
+        timestamp: now,
       ),
     );
 

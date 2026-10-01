@@ -9,6 +9,13 @@ import '../../../core/widgets/empty_state.dart';
 import '../../../core/widgets/page_header.dart';
 import '../../../core/widgets/responsive_layout.dart';
 import '../../../core/widgets/status_badge.dart';
+import '../../../core/sync/sync_engine.dart';
+import '../../transport/data/transport_repository.dart';
+import '../../transport/presentation/transport_view_model.dart';
+import '../../vehicles/data/vehicle_repository.dart';
+import '../../vehicles/presentation/vehicle_view_model.dart';
+import '../../parties/data/party_repository.dart';
+import '../../parties/presentation/party_view_model.dart';
 import 'reports_view_model.dart';
 
 import 'dart:io';
@@ -34,6 +41,16 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> with SingleTicker
   void dispose() {
     _tabController.dispose();
     super.dispose();
+  }
+
+  Future<void> _onRefresh() async {
+    await ref.read(syncEngineProvider.notifier).syncAll();
+    await ref.read(transportRepositoryProvider).reloadFromDatabase();
+    await ref.read(vehicleRepositoryProvider).reloadFromDatabase();
+    await ref.read(partyRepositoryProvider).reloadFromDatabase();
+    ref.read(transportViewModelProvider.notifier).loadTransports();
+    ref.read(vehicleViewModelProvider.notifier).loadVehicles();
+    ref.read(partyViewModelProvider.notifier).loadParties();
   }
 
   Future<void> _handleExport(String format) async {
@@ -245,8 +262,11 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> with SingleTicker
     final isMobile = ResponsiveLayout.isMobile(context);
 
     return Scaffold(
-      body: SingleChildScrollView(
-        padding: EdgeInsets.all(isMobile ? 16 : 24),
+      body: RefreshIndicator(
+        onRefresh: _onRefresh,
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.all(isMobile ? 16 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -368,6 +388,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> with SingleTicker
             const SizedBox(height: 40),
           ],
         ),
+      ),
       ),
     );
   }
