@@ -249,9 +249,11 @@ class SettingsScreen extends ConsumerWidget {
                     children: [
                       ElevatedButton.icon(
                         icon: const Icon(Icons.sync, size: 18),
-                        label: Text(syncState.pendingCount > 0
-                            ? 'Sync Now (${syncState.pendingCount} offline pending)'
-                            : 'Sync Now'),
+                        label: Text(syncState.isSyncing
+                            ? 'Syncing...'
+                            : syncState.pendingCount > 0
+                                ? 'Sync Now (${syncState.pendingCount} pending)'
+                                : 'Sync Now (All Synced)'),
                         onPressed: syncState.isSyncing || syncState.pendingCount == 0
                             ? null
                             : () => ref.read(syncEngineProvider.notifier).syncPending(),

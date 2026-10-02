@@ -44,6 +44,8 @@ class LocalTransports extends Table {
   DateTimeColumn get podReceivedAt => dateTime().nullable()();
   DateTimeColumn get completedAt => dateTime().nullable()();
 
+  DateTimeColumn get staffingDate => dateTime().nullable()();
+
   DateTimeColumn get createdAt => dateTime()();
   DateTimeColumn get updatedAt => dateTime().withDefault(currentDateAndTime)();
 

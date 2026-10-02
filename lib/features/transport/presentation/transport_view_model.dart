@@ -1,7 +1,9 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/enums/container_size.dart';
+import '../../../core/enums/driver_status.dart';
 import '../../../core/enums/shipment_type.dart';
 import '../../../core/enums/transport_status.dart';
+import '../../../core/enums/vehicle_status.dart';
 import '../../../core/services/assignment_service.dart';
 import '../../../core/sync/sync_engine.dart';
 import '../../../core/utils/id_generator.dart';
@@ -178,6 +180,7 @@ class TransportViewModel extends StateNotifier<TransportState> {
   }
 
   void _refreshState() {
+    if (!mounted) return;
     final all = _repo.getAll();
     IdGenerator.syncTransportCounter(all.map((t) => t.id));
     state = state.copyWith(
@@ -188,7 +191,63 @@ class TransportViewModel extends StateNotifier<TransportState> {
   }
 
   void loadTransports() {
+    if (!mounted) return;
     _refreshState();
+    _reconcileFleetStatus();
+  }
+
+  /// Self-heals any orphaned 'ON_TRIP' vehicles or drivers that are not
+  /// currently assigned to any active (non-completed, non-cancelled) transport.
+  void _reconcileFleetStatus() {
+    final activeTransports = _repo.getAll().where((t) => t.status.isActive).toList();
+    final activeVehicleKeys = <String>{};
+    final activeDriverKeys = <String>{};
+
+    for (final t in activeTransports) {
+      for (final a in t.allocations) {
+        if (a.vehicleId.trim().isNotEmpty) activeVehicleKeys.add(a.vehicleId.trim().toLowerCase());
+        if (a.vehicleNumber.trim().isNotEmpty) activeVehicleKeys.add(a.vehicleNumber.trim().toLowerCase());
+        if (a.driverId != null && a.driverId!.trim().isNotEmpty) activeDriverKeys.add(a.driverId!.trim().toLowerCase());
+        if (a.driverName != null && a.driverName!.trim().isNotEmpty) activeDriverKeys.add(a.driverName!.trim().toLowerCase());
+      }
+      if (t.vehicleId != null && t.vehicleId!.trim().isNotEmpty) activeVehicleKeys.add(t.vehicleId!.trim().toLowerCase());
+      if (t.vehicleNumber != null && t.vehicleNumber!.trim().isNotEmpty) activeVehicleKeys.add(t.vehicleNumber!.trim().toLowerCase());
+      if (t.driverId != null && t.driverId!.trim().isNotEmpty) activeDriverKeys.add(t.driverId!.trim().toLowerCase());
+      if (t.driverName != null && t.driverName!.trim().isNotEmpty) activeDriverKeys.add(t.driverName!.trim().toLowerCase());
+    }
+
+    bool anyChanged = false;
+
+    // Check all vehicles
+    final vehicles = _assignmentService.vehicleRepo.getAll();
+    for (final v in vehicles) {
+      if (v.status == VehicleStatus.onTrip) {
+        final isAssigned = activeVehicleKeys.contains(v.id.trim().toLowerCase()) ||
+            activeVehicleKeys.contains(v.vehicleNumber.trim().toLowerCase());
+        if (!isAssigned) {
+          _assignmentService.releaseVehicle(v.id, vehicleNumber: v.vehicleNumber);
+          anyChanged = true;
+        }
+      }
+    }
+
+    // Check all drivers
+    final drivers = _assignmentService.driverRepo.getAll();
+    for (final d in drivers) {
+      if (d.status == DriverStatus.onTrip) {
+        final isAssigned = activeDriverKeys.contains(d.id.trim().toLowerCase()) ||
+            activeDriverKeys.contains(d.name.trim().toLowerCase()) ||
+            activeDriverKeys.contains(d.mobileNumber.trim());
+        if (!isAssigned) {
+          _assignmentService.releaseDriver(d.id, driverName: d.name);
+          anyChanged = true;
+        }
+      }
+    }
+
+    if (anyChanged) {
+      onFleetChanged?.call();
+    }
   }
 
   void setSearchQuery(String query) => state = state.copyWith(searchQuery: query);
@@ -234,6 +293,7 @@ class TransportViewModel extends StateNotifier<TransportState> {
     String? driverId,
     String? driverName,
     String? driverMobile,
+    DateTime? staffingDate,
   }) async {
     final now = DateTime.now();
     IdGenerator.syncTransportCounter(_repo.getAll().map((t) => t.id));
@@ -303,6 +363,7 @@ class TransportViewModel extends StateNotifier<TransportState> {
       portCfsName: portCfsName,
       allocations: const [], // intentionally empty; slots added below
       status: initialStatus,
+      staffingDate: staffingDate ?? now,
       createdAt: now,
       updatedAt: now,
     );
@@ -398,12 +459,20 @@ class TransportViewModel extends StateNotifier<TransportState> {
 
     await _repo.addAllocation(allocation);
 
-    // If slot 0 and container/seal supplied, also update legacy transport columns
-    if (slotIndex == 0 && (cleanContainer != null || cleanSeal != null)) {
-      _repo.update(transport.copyWith(
-        containerNumber: cleanContainer ?? transport.containerNumber,
-        sealNumber: cleanSeal ?? transport.sealNumber,
+    // Keep transport top-level columns in sync with slot 0
+    final latestTransport = _repo.getById(transportId) ?? transport;
+    if (slotIndex == 0) {
+      _repo.update(latestTransport.copyWith(
+        containerNumber: cleanContainer ?? latestTransport.containerNumber,
+        sealNumber: cleanSeal ?? latestTransport.sealNumber,
+        vehicleId: vehicleId,
+        vehicleNumber: vehicleNumber,
+        driverId: driverId,
+        driverName: driverName,
+        driverMobile: driverMobile,
       ));
+    } else {
+      _repo.update(latestTransport);
     }
 
     _assignmentService.assignSpecific(
@@ -482,12 +551,25 @@ class TransportViewModel extends StateNotifier<TransportState> {
 
     await _repo.updateAllocation(updatedAlloc);
 
-    // If slot 0, also keep transport legacy container/seal updated
-    if (updatedAlloc.slotIndex == 0 && (cleanContainer != null || cleanSeal != null)) {
-      _repo.update(transport.copyWith(
-        containerNumber: cleanContainer ?? transport.containerNumber,
-        sealNumber: cleanSeal ?? transport.sealNumber,
+    // Keep transport top-level columns in sync with slot 0
+    final latestTransport = _repo.getById(transportId) ?? transport;
+    if (updatedAlloc.slotIndex == 0) {
+      _repo.update(latestTransport.copyWith(
+        containerNumber: cleanContainer ?? latestTransport.containerNumber,
+        sealNumber: cleanSeal ?? latestTransport.sealNumber,
+        driverId: updatedAlloc.driverId ?? latestTransport.driverId,
+        driverName: updatedAlloc.driverName ?? latestTransport.driverName,
+        driverMobile: updatedAlloc.driverMobile ?? latestTransport.driverMobile,
       ));
+    } else {
+      _repo.update(latestTransport);
+    }
+
+    // Auto-advance status to DRIVER_ASSIGNED if it was BOOKING_CREATED and driver is now set
+    if (latestTransport.status == TransportStatus.bookingCreated &&
+        ((updatedAlloc.driverId != null && updatedAlloc.driverId!.isNotEmpty) ||
+         (driverId != null && driverId.isNotEmpty))) {
+      _repo.updateStatus(transportId, TransportStatus.driverAssigned);
     }
 
     final now = DateTime.now();
@@ -549,33 +631,70 @@ class TransportViewModel extends StateNotifier<TransportState> {
     final current = _repo.getById(transportId);
     if (current == null) return;
 
+    if (newStatus == TransportStatus.completed) {
+      completeTransport(transportId);
+      return;
+    }
+
     _repo.updateStatus(transportId, newStatus, exceptionReason: exceptionReason);
 
-    // If cancelled, release vehicle and driver
+    // If cancelled, release vehicle and driver for all allocations
     if (newStatus == TransportStatus.cancelled) {
       for (final alloc in current.allocations) {
-        _assignmentService.releaseVehicle(alloc.vehicleId, transportId: transportId);
+        _assignmentService.releaseVehicle(
+          alloc.vehicleId,
+          vehicleNumber: alloc.vehicleNumber,
+          transportId: transportId,
+        );
         if (alloc.driverId != null && alloc.driverId!.isNotEmpty) {
-          _assignmentService.releaseDriver(alloc.driverId, transportId: transportId);
+          _assignmentService.releaseDriver(
+            alloc.driverId,
+            driverName: alloc.driverName,
+            transportId: transportId,
+          );
+        } else if (alloc.driverName != null && alloc.driverName!.isNotEmpty) {
+          _assignmentService.releaseDriver(
+            alloc.driverName,
+            driverName: alloc.driverName,
+            transportId: transportId,
+          );
         }
       }
       if (current.vehicleId != null) {
-        _assignmentService.releaseVehicle(current.vehicleId, transportId: transportId);
+        _assignmentService.releaseVehicle(
+          current.vehicleId,
+          vehicleNumber: current.vehicleNumber,
+          transportId: transportId,
+        );
       }
       if (current.driverId != null) {
-        _assignmentService.releaseDriver(current.driverId, transportId: transportId);
+        _assignmentService.releaseDriver(
+          current.driverId,
+          driverName: current.driverName,
+          transportId: transportId,
+        );
       }
+      _reconcileFleetStatus();
       onFleetChanged?.call();
     }
 
     // If vehicle breakdown, release vehicle so it can be serviced
     if (newStatus == TransportStatus.vehicleBreakdown) {
       for (final alloc in current.allocations) {
-        _assignmentService.releaseVehicle(alloc.vehicleId, transportId: transportId);
+        _assignmentService.releaseVehicle(
+          alloc.vehicleId,
+          vehicleNumber: alloc.vehicleNumber,
+          transportId: transportId,
+        );
       }
       if (current.vehicleId != null) {
-        _assignmentService.releaseVehicle(current.vehicleId, transportId: transportId);
+        _assignmentService.releaseVehicle(
+          current.vehicleId,
+          vehicleNumber: current.vehicleNumber,
+          transportId: transportId,
+        );
       }
+      _reconcileFleetStatus();
       onFleetChanged?.call();
     }
 
@@ -641,16 +760,38 @@ class TransportViewModel extends StateNotifier<TransportState> {
 
     // Release vehicle & driver back to AVAILABLE for all allocations
     for (final alloc in current.allocations) {
-      _assignmentService.releaseVehicle(alloc.vehicleId, transportId: transportId);
+      _assignmentService.releaseVehicle(
+        alloc.vehicleId,
+        vehicleNumber: alloc.vehicleNumber,
+        transportId: transportId,
+      );
       if (alloc.driverId != null && alloc.driverId!.isNotEmpty) {
-        _assignmentService.releaseDriver(alloc.driverId, transportId: transportId);
+        _assignmentService.releaseDriver(
+          alloc.driverId,
+          driverName: alloc.driverName,
+          transportId: transportId,
+        );
+      } else if (alloc.driverName != null && alloc.driverName!.isNotEmpty) {
+        _assignmentService.releaseDriver(
+          alloc.driverName,
+          driverName: alloc.driverName,
+          transportId: transportId,
+        );
       }
     }
     if (current.vehicleId != null) {
-      _assignmentService.releaseVehicle(current.vehicleId, transportId: transportId);
+      _assignmentService.releaseVehicle(
+        current.vehicleId,
+        vehicleNumber: current.vehicleNumber,
+        transportId: transportId,
+      );
     }
     if (current.driverId != null) {
-      _assignmentService.releaseDriver(current.driverId, transportId: transportId);
+      _assignmentService.releaseDriver(
+        current.driverId,
+        driverName: current.driverName,
+        transportId: transportId,
+      );
     }
 
     _repo.addActivityLog(
@@ -663,6 +804,7 @@ class TransportViewModel extends StateNotifier<TransportState> {
       ),
     );
 
+    _reconcileFleetStatus();
     loadTransports();
     onFleetChanged?.call();
     _autoSync();
@@ -691,6 +833,15 @@ class TransportViewModel extends StateNotifier<TransportState> {
         clearException: true,
       );
       _repo.update(updated);
+
+      if (current.allocations.isNotEmpty) {
+        final slot0 = current.allocations.first;
+        final updatedSlot0 = slot0.copyWith(
+          vehicleId: newVeh.id,
+          vehicleNumber: newVeh.vehicleNumber,
+        );
+        _repo.updateAllocation(updatedSlot0);
+      }
 
       _repo.addActivityLog(
         ActivityLog(
@@ -729,6 +880,16 @@ class TransportViewModel extends StateNotifier<TransportState> {
       );
       _repo.update(updated);
 
+      if (current.allocations.isNotEmpty) {
+        final slot0 = current.allocations.first;
+        final updatedSlot0 = slot0.copyWith(
+          driverId: newDrv.id,
+          driverName: newDrv.name,
+          driverMobile: newDrv.mobileNumber,
+        );
+        _repo.updateAllocation(updatedSlot0);
+      }
+
       _repo.addActivityLog(
         ActivityLog(
           id: 'act-${DateTime.now().millisecondsSinceEpoch}',
@@ -760,6 +921,15 @@ class TransportViewModel extends StateNotifier<TransportState> {
     );
     _repo.update(updated);
 
+    if (current.allocations.isNotEmpty) {
+      final slot0 = current.allocations.first;
+      final updatedSlot0 = slot0.copyWith(
+        containerNumber: updated.containerNumber,
+        sealNumber: updated.sealNumber,
+      );
+      _repo.updateAllocation(updatedSlot0);
+    }
+
     _repo.addActivityLog(
       ActivityLog(
         id: 'act-${DateTime.now().millisecondsSinceEpoch}',
@@ -780,19 +950,42 @@ class TransportViewModel extends StateNotifier<TransportState> {
     final current = _repo.getById(id);
     if (current != null) {
       for (final alloc in current.allocations) {
-        _assignmentService.releaseVehicle(alloc.vehicleId, transportId: id);
+        _assignmentService.releaseVehicle(
+          alloc.vehicleId,
+          vehicleNumber: alloc.vehicleNumber,
+          transportId: id,
+        );
         if (alloc.driverId != null && alloc.driverId!.isNotEmpty) {
-          _assignmentService.releaseDriver(alloc.driverId, transportId: id);
+          _assignmentService.releaseDriver(
+            alloc.driverId,
+            driverName: alloc.driverName,
+            transportId: id,
+          );
+        } else if (alloc.driverName != null && alloc.driverName!.isNotEmpty) {
+          _assignmentService.releaseDriver(
+            alloc.driverName,
+            driverName: alloc.driverName,
+            transportId: id,
+          );
         }
       }
       if (current.vehicleId != null) {
-        _assignmentService.releaseVehicle(current.vehicleId, transportId: id);
+        _assignmentService.releaseVehicle(
+          current.vehicleId,
+          vehicleNumber: current.vehicleNumber,
+          transportId: id,
+        );
       }
       if (current.driverId != null) {
-        _assignmentService.releaseDriver(current.driverId, transportId: id);
+        _assignmentService.releaseDriver(
+          current.driverId,
+          driverName: current.driverName,
+          transportId: id,
+        );
       }
     }
     _repo.delete(id);
+    _reconcileFleetStatus();
     loadTransports();
     onFleetChanged?.call();
     _autoSync();

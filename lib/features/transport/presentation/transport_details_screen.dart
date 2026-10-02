@@ -1109,6 +1109,11 @@ class TransportDetailsScreen extends ConsumerWidget {
                   const Divider(height: 16),
                   _buildDetailRow('Size & Type', '${transport.containerSize.label} • ${transport.shipmentType.label}'),
                   _buildDetailRow('Customer', transport.partyName),
+                  if (transport.staffingDate != null)
+                    _buildDetailRow(
+                      'Staffing Date',
+                      '${transport.staffingDate!.day.toString().padLeft(2, '0')}-${transport.staffingDate!.month.toString().padLeft(2, '0')}-${transport.staffingDate!.year}',
+                    ),
                   _buildDetailRow('Shipping Line', transport.shippingLineName),
                   _buildDetailRow('Origin (From)', transport.fromLocationName),
                   _buildDetailRow('Destination (To)', transport.toLocationName),

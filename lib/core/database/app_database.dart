@@ -102,6 +102,12 @@ class AppDatabase extends _$AppDatabase {
               'ALTER TABLE local_transport_allocations ADD COLUMN seal_number TEXT;',
             );
           } catch (_) {}
+          // v6 migration: add staffing_date column to transports
+          try {
+            await customStatement(
+              'ALTER TABLE local_transports ADD COLUMN staffing_date INTEGER;',
+            );
+          } catch (_) {}
         },
       );
 

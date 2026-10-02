@@ -37,6 +37,9 @@ class Transport {
   final DateTime updatedAt;
   final DateTime? completionDate;
 
+  // Staffing date (set once at booking creation, immutable afterwards)
+  final DateTime? staffingDate;
+
   // POD
   final PodDocument? pod;
 
@@ -68,6 +71,7 @@ class Transport {
     required this.createdAt,
     required this.updatedAt,
     this.completionDate,
+    this.staffingDate,
     this.pod,
     this.exceptionReason,
   });
@@ -118,6 +122,7 @@ class Transport {
     DateTime? createdAt,
     DateTime? updatedAt,
     DateTime? completionDate,
+    DateTime? staffingDate,
     PodDocument? pod,
     String? exceptionReason,
     bool clearException = false,
@@ -138,6 +143,8 @@ class Transport {
             driverId: driverId ?? first.driverId,
             driverName: driverName ?? first.driverName,
             driverMobile: driverMobile ?? first.driverMobile,
+            containerNumber: containerNumber ?? first.containerNumber,
+            sealNumber: sealNumber ?? first.sealNumber,
             assignedAt: first.assignedAt,
           ),
           ...this.allocations.skip(1),
@@ -153,6 +160,8 @@ class Transport {
             driverId: driverId,
             driverName: driverName,
             driverMobile: driverMobile,
+            containerNumber: containerNumber ?? this.containerNumber,
+            sealNumber: sealNumber ?? this.sealNumber,
             assignedAt: DateTime.now(),
           ),
         ];
@@ -184,6 +193,7 @@ class Transport {
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       completionDate: completionDate ?? this.completionDate,
+      staffingDate: staffingDate ?? this.staffingDate,
       pod: clearPod ? null : (pod ?? this.pod),
       exceptionReason: clearException ? null : (exceptionReason ?? this.exceptionReason),
     );
@@ -220,6 +230,7 @@ class Transport {
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
       'completionDate': completionDate?.toIso8601String(),
+      'staffingDate': staffingDate?.toIso8601String(),
       'pod': pod?.toJson(),
       'exceptionReason': exceptionReason,
     };
@@ -252,6 +263,9 @@ class Transport {
       updatedAt: DateTime.parse(json['updatedAt'] as String),
       completionDate: json['completionDate'] != null
           ? DateTime.parse(json['completionDate'] as String)
+          : null,
+      staffingDate: json['staffingDate'] != null
+          ? DateTime.parse(json['staffingDate'] as String)
           : null,
       pod: json['pod'] != null
           ? PodDocument.fromJson(json['pod'] as Map<String, dynamic>)

@@ -61,6 +61,10 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
   String? _shippingLineId;
   String? _shippingLineName;
   final _bookingNumberCtrl = TextEditingController(text: IdGenerator.generateBookingNumber());
+  DateTime _staffingDate = DateTime.now();
+  late final TextEditingController _staffingDateCtrl = TextEditingController(
+    text: '${_staffingDate.day.toString().padLeft(2, '0')}-${_staffingDate.month.toString().padLeft(2, '0')}-${_staffingDate.year}',
+  );
 
   // Section 3: Route Details
   String? _fromLocationId;
@@ -115,6 +119,7 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
   @override
   void dispose() {
     _bookingNumberCtrl.dispose();
+    _staffingDateCtrl.dispose();
     for (final slot in _allotments) {
       slot.dispose();
     }
@@ -130,6 +135,9 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
       _containerSize = ContainerSize.size40Ft;
       _shipmentType = ShipmentType.export;
       _bookingNumberCtrl.text = IdGenerator.generateBookingNumber();
+      _staffingDate = DateTime.now();
+      _staffingDateCtrl.text =
+          '${_staffingDate.day.toString().padLeft(2, '0')}-${_staffingDate.month.toString().padLeft(2, '0')}-${_staffingDate.year}';
       _allotments.clear();
       _partyId = null;
       _partyName = null;
@@ -231,6 +239,7 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
               const Text('Please review the booking details before creating:'),
               const SizedBox(height: 12),
               _confirmRow('Booking No.', _bookingNumberCtrl.text.trim().toUpperCase()),
+              _confirmRow('Staffing Date', _staffingDateCtrl.text.trim()),
               _confirmRow('Customer', _partyName ?? '-'),
               _confirmRow('Route', '${_fromLocationName ?? '-'} → ${_toLocationName ?? '-'}'),
               _confirmRow(
@@ -311,6 +320,7 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
             portCfsId: _portCfsId!,
             portCfsName: _portCfsName!,
             allocations: builtAllocations,
+            staffingDate: _staffingDate,
           );
 
       if (!mounted) return;
@@ -327,6 +337,22 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
           backgroundColor: AppColors.red,
         ),
       );
+    }
+  }
+
+  Future<void> _selectStaffingDate(BuildContext context) async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _staffingDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+    );
+    if (picked != null) {
+      setState(() {
+        _staffingDate = picked;
+        _staffingDateCtrl.text =
+            '${picked.day.toString().padLeft(2, '0')}-${picked.month.toString().padLeft(2, '0')}-${picked.year}';
+      });
     }
   }
 
@@ -597,6 +623,20 @@ class _CreateTransportScreenState extends ConsumerState<CreateTransportScreen> {
                         }
                         return null;
                       },
+                    ),
+                    const SizedBox(height: 14),
+                    AppTextField(
+                      label: 'Staffing Date',
+                      hint: 'DD-MM-YYYY',
+                      controller: _staffingDateCtrl,
+                      readOnly: true,
+                      isRequired: true,
+                      prefixIcon: Icons.calendar_today_outlined,
+                      suffixIcon: IconButton(
+                        icon: const Icon(Icons.edit_calendar_outlined, size: 20, color: AppColors.accent),
+                        onPressed: () => _selectStaffingDate(context),
+                      ),
+                      onTap: () => _selectStaffingDate(context),
                     ),
                   ],
                 ),

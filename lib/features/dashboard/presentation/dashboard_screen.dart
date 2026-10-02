@@ -27,11 +27,17 @@ class DashboardScreen extends ConsumerStatefulWidget {
 
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   Future<void> _onRefresh() async {
-    await ref.read(syncEngineProvider.notifier).syncAll();
-    await ref.read(transportRepositoryProvider).reloadFromDatabase();
-    await ref.read(vehicleRepositoryProvider).reloadFromDatabase();
-    ref.read(transportViewModelProvider.notifier).loadTransports();
-    ref.read(vehicleViewModelProvider.notifier).loadVehicles();
+    final syncNotifier = ref.read(syncEngineProvider.notifier);
+    final transportRepo = ref.read(transportRepositoryProvider);
+    final vehicleRepo = ref.read(vehicleRepositoryProvider);
+    final transportVm = ref.read(transportViewModelProvider.notifier);
+    final vehicleVm = ref.read(vehicleViewModelProvider.notifier);
+
+    await syncNotifier.syncAll();
+    await transportRepo.reloadFromDatabase();
+    await vehicleRepo.reloadFromDatabase();
+    transportVm.loadTransports();
+    vehicleVm.loadVehicles();
   }
 
   @override

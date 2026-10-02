@@ -14,7 +14,7 @@ Future<void> main() async {
         url: EnvConfig.supabaseUrl,
         // ignore: deprecated_member_use
         anonKey: EnvConfig.supabaseAnonKey,
-      );
+      ).timeout(const Duration(seconds: 4));
     } catch (_) {
       // Gracefully continue in local-first offline mode
     }

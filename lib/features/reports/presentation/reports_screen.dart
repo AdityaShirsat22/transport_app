@@ -44,13 +44,21 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen> with SingleTicker
   }
 
   Future<void> _onRefresh() async {
-    await ref.read(syncEngineProvider.notifier).syncAll();
-    await ref.read(transportRepositoryProvider).reloadFromDatabase();
-    await ref.read(vehicleRepositoryProvider).reloadFromDatabase();
-    await ref.read(partyRepositoryProvider).reloadFromDatabase();
-    ref.read(transportViewModelProvider.notifier).loadTransports();
-    ref.read(vehicleViewModelProvider.notifier).loadVehicles();
-    ref.read(partyViewModelProvider.notifier).loadParties();
+    final syncNotifier = ref.read(syncEngineProvider.notifier);
+    final transportRepo = ref.read(transportRepositoryProvider);
+    final vehicleRepo = ref.read(vehicleRepositoryProvider);
+    final partyRepo = ref.read(partyRepositoryProvider);
+    final transportVm = ref.read(transportViewModelProvider.notifier);
+    final vehicleVm = ref.read(vehicleViewModelProvider.notifier);
+    final partyVm = ref.read(partyViewModelProvider.notifier);
+
+    await syncNotifier.syncAll();
+    await transportRepo.reloadFromDatabase();
+    await vehicleRepo.reloadFromDatabase();
+    await partyRepo.reloadFromDatabase();
+    transportVm.loadTransports();
+    vehicleVm.loadVehicles();
+    partyVm.loadParties();
   }
 
   Future<void> _handleExport(String format) async {

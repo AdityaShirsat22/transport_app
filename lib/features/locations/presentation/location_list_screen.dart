@@ -23,9 +23,13 @@ class LocationListScreen extends ConsumerStatefulWidget {
 
 class _LocationListScreenState extends ConsumerState<LocationListScreen> {
   Future<void> _onRefresh() async {
-    await ref.read(syncEngineProvider.notifier).syncAll();
-    await ref.read(locationRepositoryProvider).reloadFromDatabase();
-    ref.read(locationViewModelProvider.notifier).loadLocations();
+    final syncNotifier = ref.read(syncEngineProvider.notifier);
+    final locationRepo = ref.read(locationRepositoryProvider);
+    final locationVm = ref.read(locationViewModelProvider.notifier);
+
+    await syncNotifier.syncAll();
+    await locationRepo.reloadFromDatabase();
+    locationVm.loadLocations();
   }
 
   void _showAddDialog(BuildContext context) {

@@ -23,9 +23,13 @@ class PortCfsListScreen extends ConsumerStatefulWidget {
 
 class _PortCfsListScreenState extends ConsumerState<PortCfsListScreen> {
   Future<void> _onRefresh() async {
-    await ref.read(syncEngineProvider.notifier).syncAll();
-    await ref.read(portCfsRepositoryProvider).reloadFromDatabase();
-    ref.read(portCfsViewModelProvider.notifier).loadItems();
+    final syncNotifier = ref.read(syncEngineProvider.notifier);
+    final portCfsRepo = ref.read(portCfsRepositoryProvider);
+    final portCfsVm = ref.read(portCfsViewModelProvider.notifier);
+
+    await syncNotifier.syncAll();
+    await portCfsRepo.reloadFromDatabase();
+    portCfsVm.loadItems();
   }
 
   void _showAddDialog(BuildContext context) {

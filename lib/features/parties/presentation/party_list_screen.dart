@@ -22,9 +22,13 @@ class PartyListScreen extends ConsumerStatefulWidget {
 
 class _PartyListScreenState extends ConsumerState<PartyListScreen> {
   Future<void> _onRefresh() async {
-    await ref.read(syncEngineProvider.notifier).syncAll();
-    await ref.read(partyRepositoryProvider).reloadFromDatabase();
-    ref.read(partyViewModelProvider.notifier).loadParties();
+    final syncNotifier = ref.read(syncEngineProvider.notifier);
+    final partyRepo = ref.read(partyRepositoryProvider);
+    final partyVm = ref.read(partyViewModelProvider.notifier);
+
+    await syncNotifier.syncAll();
+    await partyRepo.reloadFromDatabase();
+    partyVm.loadParties();
   }
 
   void _showAddDialog(BuildContext context) {

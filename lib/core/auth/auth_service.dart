@@ -219,6 +219,19 @@ class AuthService {
           role: result['role'] as String? ?? role,
         );
 
+        // Sign into Supabase anonymously so the coordinator gets an
+        // `authenticated` session. Without this, all RLS-protected table
+        // reads (transports, transport_allocations, etc.) return empty
+        // results and the coordinator sees no data on their device.
+        try {
+          if (client.auth.currentSession == null) {
+            await client.auth.signInAnonymously();
+          }
+        } catch (_) {
+          // Non-fatal: we still complete the login with a local session.
+          // The coordinator will see cached data if any exists locally.
+        }
+
         await _saveLocalSession(appUser);
         return appUser;
       } catch (e) {

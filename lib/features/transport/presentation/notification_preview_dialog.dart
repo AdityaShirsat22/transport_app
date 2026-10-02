@@ -46,8 +46,7 @@ class NotificationPreviewDialog extends StatefulWidget {
       _NotificationPreviewDialogState();
 }
 
-class _NotificationPreviewDialogState
-    extends State<NotificationPreviewDialog> {
+class _NotificationPreviewDialogState extends State<NotificationPreviewDialog> {
   _Recipient _recipient = _Recipient.customer;
   _Format _format = _Format.whatsapp;
 
@@ -58,34 +57,56 @@ class _NotificationPreviewDialogState
   String _whatsappMessage(_Recipient r) {
     final now = DateTime.now();
     final dateStr =
-        '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+        '${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}';
     final allocs = t?.allocations ?? [];
-
     String fleetSection;
     if (allocs.isNotEmpty) {
-      fleetSection = allocs.asMap().entries.map((e) {
-        final a = e.value;
-        final c = (a.containerNumber != null && a.containerNumber!.isNotEmpty) ? a.containerNumber! : 'Pending';
-        final s = (a.sealNumber != null && a.sealNumber!.isNotEmpty) ? a.sealNumber! : 'Pending';
-        final d = a.driverName ?? 'Pending';
-        final m = (a.driverMobile != null && a.driverMobile!.isNotEmpty) ? ' (${a.driverMobile})' : '';
-        return '• *Slot ${e.key + 1}:* Vehicle: ${a.vehicleNumber} | Driver: $d$m\n  *Container:* $c | *Seal:* $s';
-      }).join('\n');
+      fleetSection = allocs
+          .asMap()
+          .entries
+          .map((e) {
+            final a = e.value;
+            final c =
+                (a.containerNumber != null && a.containerNumber!.isNotEmpty)
+                ? a.containerNumber!
+                : 'Pending';
+            final s = (a.sealNumber != null && a.sealNumber!.isNotEmpty)
+                ? a.sealNumber!
+                : 'Pending';
+            final d = (a.driverName != null && a.driverName!.isNotEmpty)
+                ? a.driverName!
+                : 'Pending';
+            final m = (a.driverMobile != null && a.driverMobile!.isNotEmpty)
+                ? ' (${a.driverMobile})'
+                : '';
+            final v = a.vehicleNumber.isNotEmpty ? a.vehicleNumber : 'Pending';
+            return '• *Slot ${e.key + 1}:*\nVehicle: $v\nDriver: $d$m\nContainer No: $c\nSeal No: $s';
+          })
+          .join('\n\n');
     } else {
-      final cntr = (t?.containerNumber.isNotEmpty ?? false) ? t!.containerNumber : 'Pending';
-      final seal = (t?.sealNumber.isNotEmpty ?? false) ? t!.sealNumber : 'Pending';
-      final v = (t?.vehicleNumber != null && t!.vehicleNumber!.isNotEmpty) ? t!.vehicleNumber! : 'N/A';
-      final d = (t?.driverName != null && t!.driverName!.isNotEmpty) ? t!.driverName! : 'N/A';
-      final m = (t?.driverMobile != null && t!.driverMobile!.isNotEmpty) ? t!.driverMobile! : 'N/A';
-      fleetSection = '• *Vehicle:* $v\n• *Driver:* $d ($m)\n• *Container:* $cntr | *Seal:* $seal';
+      final cntr = (t?.containerNumber.isNotEmpty ?? false)
+          ? t!.containerNumber
+          : 'Pending';
+      final seal = (t?.sealNumber.isNotEmpty ?? false)
+          ? t!.sealNumber
+          : 'Pending';
+      final v = (t?.vehicleNumber != null && t!.vehicleNumber!.isNotEmpty)
+          ? t!.vehicleNumber!
+          : 'Pending';
+      final d = (t?.driverName != null && t!.driverName!.isNotEmpty)
+          ? t!.driverName!
+          : 'Pending';
+      final m = (t?.driverMobile != null && t!.driverMobile!.isNotEmpty)
+          ? ' (${t!.driverMobile})'
+          : '';
+      fleetSection =
+          '• *Slot 1:*\nVehicle: $v\nDriver: $d$m\nContainer No: $cntr\nSeal No: $seal';
     }
 
-    final singleCntr = allocs.isNotEmpty && allocs.first.containerNumber != null && allocs.first.containerNumber!.isNotEmpty
-        ? allocs.first.containerNumber!
-        : ((t?.containerNumber.isNotEmpty ?? false) ? t!.containerNumber : 'Pending');
-    final singleSeal = allocs.isNotEmpty && allocs.first.sealNumber != null && allocs.first.sealNumber!.isNotEmpty
-        ? allocs.first.sealNumber!
-        : ((t?.sealNumber.isNotEmpty ?? false) ? t!.sealNumber : 'Pending');
+    final staffingDate = t?.staffingDate;
+    final staffingDateStr = staffingDate != null
+        ? '${staffingDate.day.toString().padLeft(2, '0')}-${staffingDate.month.toString().padLeft(2, '0')}-${staffingDate.year}'
+        : dateStr;
 
     switch (r) {
       case _Recipient.customer:
@@ -97,7 +118,7 @@ Your container transportation booking has been successfully confirmed and schedu
 
 📋 *BOOKING SUMMARY:*
 • *Booking No:* ${t?.bookingNumber ?? 'BK-2026-XXXX'}
-• *Date:* $dateStr
+• *Staffing Date:* $staffingDateStr
 • *Shipping Line:* ${t?.shippingLineName ?? 'N/A'}
 • *Operation Type:* ${t?.shipmentType.label ?? 'Export'} (${t?.containerSize.label ?? '40ft'})
 
@@ -122,9 +143,10 @@ You have been assigned a new transport trip. Please review the details below.
 
 📋 *TRIP DETAILS:*
 • *Booking No:* ${t?.bookingNumber ?? 'BK-2026-XXXX'}
-• *Container No:* $singleCntr
-• *Seal No:* $singleSeal
 • *Container Size:* ${t?.containerSize.label ?? '40ft'} – ${t?.shipmentType.label ?? 'Export'}
+
+🚚 *ASSIGNED FLEET & CONTAINERS:*
+$fleetSection
 
 🗺️ *ROUTE:*
 • *Pick-up (From):* ${t?.fromLocationName ?? 'Origin'}
@@ -145,6 +167,7 @@ You have been assigned a new transport trip. Please review the details below.
 *Booking Created – Internal Reference*
 
 • *Booking No:* ${t?.bookingNumber ?? 'BK-2026-XXXX'}
+• *Staffing Date:* $staffingDateStr
 • *Customer:* ${t?.partyName ?? 'N/A'}
 • *Booking Party:* ${t?.bookingPartyName ?? 'N/A'}
 • *Shipping Line:* ${t?.shippingLineName ?? 'N/A'}
@@ -196,25 +219,36 @@ _Please update the internal records accordingly._''';
     // Opens WhatsApp contact/chat selector so the sender chooses the recipient.
     final whatsappSchemeUri = Uri.parse('whatsapp://send?text=$encoded');
     // 2. Universal web link fallback without recipient:
-    final waUniversalUri = Uri.parse('https://api.whatsapp.com/send?text=$encoded');
+    final waUniversalUri = Uri.parse(
+      'https://api.whatsapp.com/send?text=$encoded',
+    );
 
     try {
       if (await canLaunchUrl(whatsappSchemeUri)) {
-        final launched = await launchUrl(whatsappSchemeUri, mode: LaunchMode.externalApplication);
+        final launched = await launchUrl(
+          whatsappSchemeUri,
+          mode: LaunchMode.externalApplication,
+        );
         if (launched) return;
       }
     } catch (_) {}
 
     try {
       if (await canLaunchUrl(waUniversalUri)) {
-        final launched = await launchUrl(waUniversalUri, mode: LaunchMode.externalApplication);
+        final launched = await launchUrl(
+          waUniversalUri,
+          mode: LaunchMode.externalApplication,
+        );
         if (launched) return;
       }
     } catch (_) {}
 
     // 3. Fallback to platform default browser/handler
     try {
-      final launched = await launchUrl(waUniversalUri, mode: LaunchMode.platformDefault);
+      final launched = await launchUrl(
+        waUniversalUri,
+        mode: LaunchMode.platformDefault,
+      );
       if (launched) return;
     } catch (_) {}
 
@@ -223,7 +257,9 @@ _Please update the internal records accordingly._''';
       _copyText(message);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not open WhatsApp. Message copied to clipboard!'),
+          content: Text(
+            'Could not open WhatsApp. Message copied to clipboard!',
+          ),
           backgroundColor: Color(0xFFE53935),
         ),
       );
@@ -245,7 +281,10 @@ _Please update the internal records accordingly._''';
     } catch (_) {}
 
     try {
-      final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
+      final launched = await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
       if (launched) return;
     } catch (_) {}
 
@@ -253,7 +292,9 @@ _Please update the internal records accordingly._''';
       _copyText('Subject: $subject\n\n$body');
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not open Email app. Content copied to clipboard!'),
+          content: Text(
+            'Could not open Email app. Content copied to clipboard!',
+          ),
           backgroundColor: Color(0xFFE53935),
         ),
       );
@@ -302,8 +343,11 @@ _Please update the internal records accordingly._''';
                     color: const Color(0xFF25D366).withValues(alpha: 0.12),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(Icons.chat_rounded,
-                      color: Color(0xFF25D366), size: 22),
+                  child: const Icon(
+                    Icons.chat_rounded,
+                    color: Color(0xFF25D366),
+                    size: 22,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -352,9 +396,7 @@ _Please update the internal records accordingly._''';
               constraints: BoxConstraints(maxHeight: screenH * 0.35),
               width: double.infinity,
               decoration: BoxDecoration(
-                color: isWa
-                    ? const Color(0xFFECF5E8)
-                    : AppColors.surface,
+                color: isWa ? const Color(0xFFECF5E8) : AppColors.surface,
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
                   color: isWa
@@ -403,8 +445,7 @@ class _RecipientSelector extends StatelessWidget {
   final _Recipient selected;
   final ValueChanged<_Recipient> onChanged;
 
-  const _RecipientSelector(
-      {required this.selected, required this.onChanged});
+  const _RecipientSelector({required this.selected, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -423,8 +464,10 @@ class _RecipientSelector extends StatelessWidget {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
                 margin: const EdgeInsets.all(4),
-                padding:
-                    const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 10,
+                  horizontal: 4,
+                ),
                 decoration: BoxDecoration(
                   color: isSelected ? AppColors.accent : Colors.transparent,
                   borderRadius: BorderRadius.circular(8),
@@ -471,8 +514,7 @@ class _FormatSelector extends StatelessWidget {
   final _Format selected;
   final ValueChanged<_Format> onChanged;
 
-  const _FormatSelector(
-      {required this.selected, required this.onChanged});
+  const _FormatSelector({required this.selected, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -547,10 +589,8 @@ class _FormatTab extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 13,
-                    fontWeight:
-                        isSelected ? FontWeight.w700 : FontWeight.w500,
-                    color:
-                        isSelected ? Colors.white : AppColors.textSecondary,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: isSelected ? Colors.white : AppColors.textSecondary,
                   ),
                 ),
               ),

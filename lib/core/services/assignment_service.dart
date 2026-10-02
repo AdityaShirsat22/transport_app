@@ -28,6 +28,10 @@ class AssignmentService {
 
   AssignmentService(this._vehicleRepo, this._driverRepo, this._transportRepo);
 
+  VehicleRepository get vehicleRepo => _vehicleRepo;
+  DriverRepository get driverRepo => _driverRepo;
+  TransportRepository get transportRepo => _transportRepo;
+
   /// Find available vehicle matching container size
   Vehicle? findAvailableVehicle(String containerSizeCode) {
     final vehicles = _vehicleRepo.getAll();
@@ -144,20 +148,34 @@ class AssignmentService {
   }
 
   /// Release a vehicle back to AVAILABLE
-  void releaseVehicle(String? vehicleId, {String? transportId}) {
-    if (vehicleId == null || vehicleId.trim().isEmpty) return;
-    _vehicleRepo.updateStatus(vehicleId, VehicleStatus.available, driverId: null, driverName: null, clearDriver: true);
-    if (transportId != null && transportId.isNotEmpty) {
-      _transportRepo.releaseVehicleAssignment(transportId: transportId, vehicleId: vehicleId);
+  void releaseVehicle(String? vehicleId, {String? vehicleNumber, String? transportId}) {
+    if (vehicleId != null && vehicleId.trim().isNotEmpty) {
+      _vehicleRepo.updateStatus(vehicleId, VehicleStatus.available, driverId: null, driverName: null, clearDriver: true);
+      if (transportId != null && transportId.isNotEmpty) {
+        _transportRepo.releaseVehicleAssignment(transportId: transportId, vehicleId: vehicleId);
+      }
+    }
+    if (vehicleNumber != null && vehicleNumber.trim().isNotEmpty && vehicleNumber != vehicleId) {
+      _vehicleRepo.updateStatus(vehicleNumber, VehicleStatus.available, driverId: null, driverName: null, clearDriver: true);
+      if (transportId != null && transportId.isNotEmpty) {
+        _transportRepo.releaseVehicleAssignment(transportId: transportId, vehicleId: vehicleNumber);
+      }
     }
   }
 
   /// Release a driver back to AVAILABLE
-  void releaseDriver(String? driverId, {String? transportId}) {
-    if (driverId == null || driverId.trim().isEmpty) return;
-    _driverRepo.updateStatus(driverId, DriverStatus.available, vehicleId: null, vehicleNumber: null, clearVehicle: true);
-    if (transportId != null && transportId.isNotEmpty) {
-      _transportRepo.releaseDriverAssignment(transportId: transportId, driverId: driverId);
+  void releaseDriver(String? driverId, {String? driverName, String? transportId}) {
+    if (driverId != null && driverId.trim().isNotEmpty) {
+      _driverRepo.updateStatus(driverId, DriverStatus.available, vehicleId: null, vehicleNumber: null, clearVehicle: true);
+      if (transportId != null && transportId.isNotEmpty) {
+        _transportRepo.releaseDriverAssignment(transportId: transportId, driverId: driverId);
+      }
+    }
+    if (driverName != null && driverName.trim().isNotEmpty && driverName != driverId) {
+      _driverRepo.updateStatus(driverName, DriverStatus.available, vehicleId: null, vehicleNumber: null, clearVehicle: true);
+      if (transportId != null && transportId.isNotEmpty) {
+        _transportRepo.releaseDriverAssignment(transportId: transportId, driverId: driverName);
+      }
     }
   }
 

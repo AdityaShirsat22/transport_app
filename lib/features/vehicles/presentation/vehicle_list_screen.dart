@@ -24,9 +24,13 @@ class VehicleListScreen extends ConsumerStatefulWidget {
 
 class _VehicleListScreenState extends ConsumerState<VehicleListScreen> {
   Future<void> _onRefresh() async {
-    await ref.read(syncEngineProvider.notifier).syncAll();
-    await ref.read(vehicleRepositoryProvider).reloadFromDatabase();
-    ref.read(vehicleViewModelProvider.notifier).loadVehicles();
+    final syncNotifier = ref.read(syncEngineProvider.notifier);
+    final vehicleRepo = ref.read(vehicleRepositoryProvider);
+    final vehicleVm = ref.read(vehicleViewModelProvider.notifier);
+
+    await syncNotifier.syncAll();
+    await vehicleRepo.reloadFromDatabase();
+    vehicleVm.loadVehicles();
   }
 
   void _showAddDialog(BuildContext context) {
@@ -147,8 +151,9 @@ class _VehicleListScreenState extends ConsumerState<VehicleListScreen> {
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
             onPressed: () async {
               Navigator.of(ctx).pop();
-              final success = await ref.read(vehicleViewModelProvider.notifier).deleteVehicle(v.id);
-              if (!context.mounted) return;
+              final vehicleVm = ref.read(vehicleViewModelProvider.notifier);
+              final success = await vehicleVm.deleteVehicle(v.id);
+              if (!mounted || !context.mounted) return;
               if (!success) {
                 final err = ref.read(vehicleViewModelProvider).errorMessage ?? 'Cannot delete vehicle';
                 ScaffoldMessenger.of(context).showSnackBar(

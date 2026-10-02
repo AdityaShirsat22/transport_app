@@ -353,18 +353,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               return null;
             },
           ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton(
-              onPressed: () => context.push('/forgot-password'),
-              child: const Text(
-                'Forgot Password?',
-                style: TextStyle(color: AppColors.accentLight, fontSize: 13),
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 24),
           AppButton(
             text: 'Sign In to Operations',
             icon: Icons.login,

@@ -133,7 +133,9 @@ class ProductionTransportRepository implements TransportRepository {
           // feature (or where _persistAllocationToDb silently failed) still
           // display their vehicle and driver in the "Assigned Fleet & Crew" card.
           List<TransportAllocation> resolvedAllocs =
-              _allocationsMap[row.id] ?? const [];
+              _allocationsMap[row.id] != null
+                  ? List<TransportAllocation>.from(_allocationsMap[row.id]!)
+                  : [];
 
           if (resolvedAllocs.isEmpty &&
               row.vehicleId != null &&
@@ -149,6 +151,8 @@ class ProductionTransportRepository implements TransportRepository {
               driverId: row.driverId,
               driverName: row.driverName,
               driverMobile: row.driverMobile,
+              containerNumber: row.containerNumber.isNotEmpty ? row.containerNumber : null,
+              sealNumber: row.sealNumber.isNotEmpty ? row.sealNumber : null,
               assignedAt: row.createdAt,
             );
             resolvedAllocs = [syntheticAlloc];
@@ -157,14 +161,39 @@ class ProductionTransportRepository implements TransportRepository {
             // Errors are intentionally swallowed here — we still show the
             // synthetic allocation in memory even if DB write fails.
             _persistAllocationToDb(syntheticAlloc).catchError((_) {});
+          } else if (resolvedAllocs.isNotEmpty) {
+            // If slot 0 is missing container or seal numbers, but the transport row has them,
+            // heal slot 0 so the container & seal numbers are displayed properly.
+            final slot0 = resolvedAllocs.first;
+            final needsContainer = (slot0.containerNumber == null || slot0.containerNumber!.isEmpty) && row.containerNumber.isNotEmpty;
+            final needsSeal = (slot0.sealNumber == null || slot0.sealNumber!.isEmpty) && row.sealNumber.isNotEmpty;
+            if (needsContainer || needsSeal) {
+              final healedSlot0 = slot0.copyWith(
+                containerNumber: needsContainer ? row.containerNumber : slot0.containerNumber,
+                sealNumber: needsSeal ? row.sealNumber : slot0.sealNumber,
+              );
+              resolvedAllocs[0] = healedSlot0;
+              _allocationsMap[row.id] = resolvedAllocs;
+              _persistAllocationToDb(healedSlot0).catchError((_) {});
+            }
           }
+
+          // If transport-level container/seal is blank, fall back to slot-0
+          // allocation's values (entered via Fleet & Crew section).
+          final slot0 = resolvedAllocs.isNotEmpty ? resolvedAllocs.first : null;
+          final effectiveContainer = (row.containerNumber.isNotEmpty)
+              ? row.containerNumber
+              : (slot0?.containerNumber ?? '');
+          final effectiveSeal = (row.sealNumber.isNotEmpty)
+              ? row.sealNumber
+              : (slot0?.sealNumber ?? '');
 
           _transports.add(
             Transport(
               id: row.id,
               bookingNumber: row.bookingNumber,
-              containerNumber: row.containerNumber,
-              sealNumber: row.sealNumber,
+              containerNumber: effectiveContainer,
+              sealNumber: effectiveSeal,
               containerSize: ContainerSize.fromCode(row.containerSize),
               shipmentType: ShipmentType.fromCode(row.shipmentType),
               partyId: row.partyId,
@@ -186,6 +215,7 @@ class ProductionTransportRepository implements TransportRepository {
               createdAt: row.createdAt,
               updatedAt: row.updatedAt,
               completionDate: row.completedAt,
+              staffingDate: row.staffingDate,
               pod: podMap[row.id],
             ),
           );
@@ -322,6 +352,11 @@ class ProductionTransportRepository implements TransportRepository {
     String? remarks,
     String changedBy = 'Super Admin',
   }) {
+    if (newStatus == TransportStatus.completed) {
+      completeTransport(transportId);
+      return;
+    }
+
     final index = _transports.indexWhere((t) => t.id == transportId);
     if (index != -1) {
       final current = _transports[index];
@@ -334,6 +369,21 @@ class ProductionTransportRepository implements TransportRepository {
       _transports[index] = updated;
       _persistTransportToDb(updated);
       _enqueueSyncTransport(updated, 'UPDATE');
+
+      if (newStatus == TransportStatus.cancelled) {
+        for (final alloc in current.allocations) {
+          releaseVehicleAssignment(transportId: transportId, vehicleId: alloc.vehicleId);
+          if (alloc.driverId != null && alloc.driverId!.isNotEmpty) {
+            releaseDriverAssignment(transportId: transportId, driverId: alloc.driverId!);
+          }
+        }
+        if (current.vehicleId != null) {
+          releaseVehicleAssignment(transportId: transportId, vehicleId: current.vehicleId!);
+        }
+        if (current.driverId != null) {
+          releaseDriverAssignment(transportId: transportId, driverId: current.driverId!);
+        }
+      }
 
       _recordStatusHistory(transportId, newStatus.code, remarks ?? newStatus.label, changedBy);
 
@@ -427,6 +477,12 @@ class ProductionTransportRepository implements TransportRepository {
       _persistTransportToDb(updated);
       _enqueueSyncTransport(updated, 'UPDATE');
 
+      for (final alloc in current.allocations) {
+        releaseVehicleAssignment(transportId: transportId, vehicleId: alloc.vehicleId);
+        if (alloc.driverId != null && alloc.driverId!.isNotEmpty) {
+          releaseDriverAssignment(transportId: transportId, driverId: alloc.driverId!);
+        }
+      }
       if (current.vehicleId != null) {
         releaseVehicleAssignment(transportId: transportId, vehicleId: current.vehicleId!);
       }
@@ -826,6 +882,7 @@ class ProductionTransportRepository implements TransportRepository {
               status: Value(t.status.code),
               exceptionReason: Value(t.exceptionReason),
               completedAt: Value(t.completionDate),
+              staffingDate: Value(t.staffingDate),
               createdAt: Value(t.createdAt),
               updatedAt: Value(DateTime.now()),
             ),
@@ -862,6 +919,7 @@ class ProductionTransportRepository implements TransportRepository {
                 status: Value(t.status.code),
                 exceptionReason: Value(t.exceptionReason),
                 completedAt: Value(t.completionDate),
+                staffingDate: Value(t.staffingDate),
                 createdAt: Value(t.createdAt),
                 updatedAt: Value(DateTime.now()),
               ),
@@ -904,6 +962,7 @@ class ProductionTransportRepository implements TransportRepository {
         'status': t.status.code,
         'exception_reason': t.exceptionReason,
         'completed_at': t.completionDate?.toIso8601String(),
+        'staffing_date': t.staffingDate?.toIso8601String(),
         'created_at': t.createdAt.toIso8601String(),
         'updated_at': DateTime.now().toIso8601String(),
       }),
@@ -1062,8 +1121,8 @@ class ProductionTransportRepository implements TransportRepository {
       payload: jsonEncode({
         'id': n.id,
         'transport_id': n.transportId,
-        'channel': n.channel,
         'recipient_phone': n.recipientMobile,
+        'channel': n.channel,
         'message': n.messageBody,
         'status': n.status,
         'sent_at': n.sentAt.toIso8601String(),

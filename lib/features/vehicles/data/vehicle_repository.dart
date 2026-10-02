@@ -88,7 +88,10 @@ class ProductionVehicleRepository implements VehicleRepository {
   @override
   Vehicle? getById(String id) {
     try {
-      return _vehicles.firstWhere((v) => v.id == id);
+      final cleanId = id.trim().toLowerCase();
+      return _vehicles.firstWhere((v) =>
+          v.id.trim().toLowerCase() == cleanId ||
+          v.vehicleNumber.trim().toLowerCase() == cleanId);
     } catch (_) {
       return null;
     }
@@ -126,7 +129,10 @@ class ProductionVehicleRepository implements VehicleRepository {
 
   @override
   void updateStatus(String vehicleId, VehicleStatus status, {String? driverId, String? driverName, bool clearDriver = false}) {
-    final index = _vehicles.indexWhere((v) => v.id == vehicleId);
+    final cleanId = vehicleId.trim().toLowerCase();
+    final index = _vehicles.indexWhere((v) =>
+        v.id.trim().toLowerCase() == cleanId ||
+        v.vehicleNumber.trim().toLowerCase() == cleanId);
     if (index != -1) {
       final shouldClear = clearDriver || (status == VehicleStatus.available && driverId == null);
       final updated = _vehicles[index].copyWith(

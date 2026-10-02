@@ -3371,6 +3371,17 @@ class $LocalTransportsTable extends LocalTransports
     type: DriftSqlType.dateTime,
     requiredDuringInsert: false,
   );
+  static const VerificationMeta _staffingDateMeta = const VerificationMeta(
+    'staffingDate',
+  );
+  @override
+  late final GeneratedColumn<DateTime> staffingDate = GeneratedColumn<DateTime>(
+    'staffing_date',
+    aliasedName,
+    true,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+  );
   static const VerificationMeta _createdAtMeta = const VerificationMeta(
     'createdAt',
   );
@@ -3430,6 +3441,7 @@ class $LocalTransportsTable extends LocalTransports
     containerDeliveredAt,
     podReceivedAt,
     completedAt,
+    staffingDate,
     createdAt,
     updatedAt,
   ];
@@ -3759,6 +3771,15 @@ class $LocalTransportsTable extends LocalTransports
         ),
       );
     }
+    if (data.containsKey('staffing_date')) {
+      context.handle(
+        _staffingDateMeta,
+        staffingDate.isAcceptableOrUnknown(
+          data['staffing_date']!,
+          _staffingDateMeta,
+        ),
+      );
+    }
     if (data.containsKey('created_at')) {
       context.handle(
         _createdAtMeta,
@@ -3918,6 +3939,10 @@ class $LocalTransportsTable extends LocalTransports
         DriftSqlType.dateTime,
         data['${effectivePrefix}completed_at'],
       ),
+      staffingDate: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}staffing_date'],
+      ),
       createdAt: attachedDatabase.typeMapping.read(
         DriftSqlType.dateTime,
         data['${effectivePrefix}created_at'],
@@ -3970,6 +3995,7 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
   final DateTime? containerDeliveredAt;
   final DateTime? podReceivedAt;
   final DateTime? completedAt;
+  final DateTime? staffingDate;
   final DateTime createdAt;
   final DateTime updatedAt;
   const LocalTransport({
@@ -4007,6 +4033,7 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
     this.containerDeliveredAt,
     this.podReceivedAt,
     this.completedAt,
+    this.staffingDate,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -4074,6 +4101,9 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
     }
     if (!nullToAbsent || completedAt != null) {
       map['completed_at'] = Variable<DateTime>(completedAt);
+    }
+    if (!nullToAbsent || staffingDate != null) {
+      map['staffing_date'] = Variable<DateTime>(staffingDate);
     }
     map['created_at'] = Variable<DateTime>(createdAt);
     map['updated_at'] = Variable<DateTime>(updatedAt);
@@ -4144,6 +4174,9 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
       completedAt: completedAt == null && nullToAbsent
           ? const Value.absent()
           : Value(completedAt),
+      staffingDate: staffingDate == null && nullToAbsent
+          ? const Value.absent()
+          : Value(staffingDate),
       createdAt: Value(createdAt),
       updatedAt: Value(updatedAt),
     );
@@ -4195,6 +4228,7 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
       ),
       podReceivedAt: serializer.fromJson<DateTime?>(json['podReceivedAt']),
       completedAt: serializer.fromJson<DateTime?>(json['completedAt']),
+      staffingDate: serializer.fromJson<DateTime?>(json['staffingDate']),
       createdAt: serializer.fromJson<DateTime>(json['createdAt']),
       updatedAt: serializer.fromJson<DateTime>(json['updatedAt']),
     );
@@ -4239,6 +4273,7 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
       ),
       'podReceivedAt': serializer.toJson<DateTime?>(podReceivedAt),
       'completedAt': serializer.toJson<DateTime?>(completedAt),
+      'staffingDate': serializer.toJson<DateTime?>(staffingDate),
       'createdAt': serializer.toJson<DateTime>(createdAt),
       'updatedAt': serializer.toJson<DateTime>(updatedAt),
     };
@@ -4279,6 +4314,7 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
     Value<DateTime?> containerDeliveredAt = const Value.absent(),
     Value<DateTime?> podReceivedAt = const Value.absent(),
     Value<DateTime?> completedAt = const Value.absent(),
+    Value<DateTime?> staffingDate = const Value.absent(),
     DateTime? createdAt,
     DateTime? updatedAt,
   }) => LocalTransport(
@@ -4328,6 +4364,7 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
         ? podReceivedAt.value
         : this.podReceivedAt,
     completedAt: completedAt.present ? completedAt.value : this.completedAt,
+    staffingDate: staffingDate.present ? staffingDate.value : this.staffingDate,
     createdAt: createdAt ?? this.createdAt,
     updatedAt: updatedAt ?? this.updatedAt,
   );
@@ -4421,6 +4458,9 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
       completedAt: data.completedAt.present
           ? data.completedAt.value
           : this.completedAt,
+      staffingDate: data.staffingDate.present
+          ? data.staffingDate.value
+          : this.staffingDate,
       createdAt: data.createdAt.present ? data.createdAt.value : this.createdAt,
       updatedAt: data.updatedAt.present ? data.updatedAt.value : this.updatedAt,
     );
@@ -4463,6 +4503,7 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
           ..write('containerDeliveredAt: $containerDeliveredAt, ')
           ..write('podReceivedAt: $podReceivedAt, ')
           ..write('completedAt: $completedAt, ')
+          ..write('staffingDate: $staffingDate, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt')
           ..write(')'))
@@ -4505,6 +4546,7 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
     containerDeliveredAt,
     podReceivedAt,
     completedAt,
+    staffingDate,
     createdAt,
     updatedAt,
   ]);
@@ -4546,6 +4588,7 @@ class LocalTransport extends DataClass implements Insertable<LocalTransport> {
           other.containerDeliveredAt == this.containerDeliveredAt &&
           other.podReceivedAt == this.podReceivedAt &&
           other.completedAt == this.completedAt &&
+          other.staffingDate == this.staffingDate &&
           other.createdAt == this.createdAt &&
           other.updatedAt == this.updatedAt);
 }
@@ -4585,6 +4628,7 @@ class LocalTransportsCompanion extends UpdateCompanion<LocalTransport> {
   final Value<DateTime?> containerDeliveredAt;
   final Value<DateTime?> podReceivedAt;
   final Value<DateTime?> completedAt;
+  final Value<DateTime?> staffingDate;
   final Value<DateTime> createdAt;
   final Value<DateTime> updatedAt;
   final Value<int> rowid;
@@ -4623,6 +4667,7 @@ class LocalTransportsCompanion extends UpdateCompanion<LocalTransport> {
     this.containerDeliveredAt = const Value.absent(),
     this.podReceivedAt = const Value.absent(),
     this.completedAt = const Value.absent(),
+    this.staffingDate = const Value.absent(),
     this.createdAt = const Value.absent(),
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -4662,6 +4707,7 @@ class LocalTransportsCompanion extends UpdateCompanion<LocalTransport> {
     this.containerDeliveredAt = const Value.absent(),
     this.podReceivedAt = const Value.absent(),
     this.completedAt = const Value.absent(),
+    this.staffingDate = const Value.absent(),
     required DateTime createdAt,
     this.updatedAt = const Value.absent(),
     this.rowid = const Value.absent(),
@@ -4720,6 +4766,7 @@ class LocalTransportsCompanion extends UpdateCompanion<LocalTransport> {
     Expression<DateTime>? containerDeliveredAt,
     Expression<DateTime>? podReceivedAt,
     Expression<DateTime>? completedAt,
+    Expression<DateTime>? staffingDate,
     Expression<DateTime>? createdAt,
     Expression<DateTime>? updatedAt,
     Expression<int>? rowid,
@@ -4761,6 +4808,7 @@ class LocalTransportsCompanion extends UpdateCompanion<LocalTransport> {
         'container_delivered_at': containerDeliveredAt,
       if (podReceivedAt != null) 'pod_received_at': podReceivedAt,
       if (completedAt != null) 'completed_at': completedAt,
+      if (staffingDate != null) 'staffing_date': staffingDate,
       if (createdAt != null) 'created_at': createdAt,
       if (updatedAt != null) 'updated_at': updatedAt,
       if (rowid != null) 'rowid': rowid,
@@ -4802,6 +4850,7 @@ class LocalTransportsCompanion extends UpdateCompanion<LocalTransport> {
     Value<DateTime?>? containerDeliveredAt,
     Value<DateTime?>? podReceivedAt,
     Value<DateTime?>? completedAt,
+    Value<DateTime?>? staffingDate,
     Value<DateTime>? createdAt,
     Value<DateTime>? updatedAt,
     Value<int>? rowid,
@@ -4841,6 +4890,7 @@ class LocalTransportsCompanion extends UpdateCompanion<LocalTransport> {
       containerDeliveredAt: containerDeliveredAt ?? this.containerDeliveredAt,
       podReceivedAt: podReceivedAt ?? this.podReceivedAt,
       completedAt: completedAt ?? this.completedAt,
+      staffingDate: staffingDate ?? this.staffingDate,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       rowid: rowid ?? this.rowid,
@@ -4956,6 +5006,9 @@ class LocalTransportsCompanion extends UpdateCompanion<LocalTransport> {
     if (completedAt.present) {
       map['completed_at'] = Variable<DateTime>(completedAt.value);
     }
+    if (staffingDate.present) {
+      map['staffing_date'] = Variable<DateTime>(staffingDate.value);
+    }
     if (createdAt.present) {
       map['created_at'] = Variable<DateTime>(createdAt.value);
     }
@@ -5005,6 +5058,7 @@ class LocalTransportsCompanion extends UpdateCompanion<LocalTransport> {
           ..write('containerDeliveredAt: $containerDeliveredAt, ')
           ..write('podReceivedAt: $podReceivedAt, ')
           ..write('completedAt: $completedAt, ')
+          ..write('staffingDate: $staffingDate, ')
           ..write('createdAt: $createdAt, ')
           ..write('updatedAt: $updatedAt, ')
           ..write('rowid: $rowid')
@@ -11004,6 +11058,7 @@ typedef $$LocalTransportsTableCreateCompanionBuilder =
       Value<DateTime?> containerDeliveredAt,
       Value<DateTime?> podReceivedAt,
       Value<DateTime?> completedAt,
+      Value<DateTime?> staffingDate,
       required DateTime createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -11044,6 +11099,7 @@ typedef $$LocalTransportsTableUpdateCompanionBuilder =
       Value<DateTime?> containerDeliveredAt,
       Value<DateTime?> podReceivedAt,
       Value<DateTime?> completedAt,
+      Value<DateTime?> staffingDate,
       Value<DateTime> createdAt,
       Value<DateTime> updatedAt,
       Value<int> rowid,
@@ -11225,6 +11281,11 @@ class $$LocalTransportsTableFilterComposer
 
   ColumnFilters<DateTime> get completedAt => $composableBuilder(
     column: $table.completedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get staffingDate => $composableBuilder(
+    column: $table.staffingDate,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -11418,6 +11479,11 @@ class $$LocalTransportsTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<DateTime> get staffingDate => $composableBuilder(
+    column: $table.staffingDate,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<DateTime> get createdAt => $composableBuilder(
     column: $table.createdAt,
     builder: (column) => ColumnOrderings(column),
@@ -11594,6 +11660,11 @@ class $$LocalTransportsTableAnnotationComposer
     builder: (column) => column,
   );
 
+  GeneratedColumn<DateTime> get staffingDate => $composableBuilder(
+    column: $table.staffingDate,
+    builder: (column) => column,
+  );
+
   GeneratedColumn<DateTime> get createdAt =>
       $composableBuilder(column: $table.createdAt, builder: (column) => column);
 
@@ -11672,6 +11743,7 @@ class $$LocalTransportsTableTableManager
                 Value<DateTime?> containerDeliveredAt = const Value.absent(),
                 Value<DateTime?> podReceivedAt = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
+                Value<DateTime?> staffingDate = const Value.absent(),
                 Value<DateTime> createdAt = const Value.absent(),
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -11710,6 +11782,7 @@ class $$LocalTransportsTableTableManager
                 containerDeliveredAt: containerDeliveredAt,
                 podReceivedAt: podReceivedAt,
                 completedAt: completedAt,
+                staffingDate: staffingDate,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,
@@ -11750,6 +11823,7 @@ class $$LocalTransportsTableTableManager
                 Value<DateTime?> containerDeliveredAt = const Value.absent(),
                 Value<DateTime?> podReceivedAt = const Value.absent(),
                 Value<DateTime?> completedAt = const Value.absent(),
+                Value<DateTime?> staffingDate = const Value.absent(),
                 required DateTime createdAt,
                 Value<DateTime> updatedAt = const Value.absent(),
                 Value<int> rowid = const Value.absent(),
@@ -11788,6 +11862,7 @@ class $$LocalTransportsTableTableManager
                 containerDeliveredAt: containerDeliveredAt,
                 podReceivedAt: podReceivedAt,
                 completedAt: completedAt,
+                staffingDate: staffingDate,
                 createdAt: createdAt,
                 updatedAt: updatedAt,
                 rowid: rowid,

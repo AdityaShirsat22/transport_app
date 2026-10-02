@@ -22,9 +22,13 @@ class ShippingLineListScreen extends ConsumerStatefulWidget {
 
 class _ShippingLineListScreenState extends ConsumerState<ShippingLineListScreen> {
   Future<void> _onRefresh() async {
-    await ref.read(syncEngineProvider.notifier).syncAll();
-    await ref.read(shippingLineRepositoryProvider).reloadFromDatabase();
-    ref.read(shippingLineViewModelProvider.notifier).loadItems();
+    final syncNotifier = ref.read(syncEngineProvider.notifier);
+    final shippingLineRepo = ref.read(shippingLineRepositoryProvider);
+    final shippingLineVm = ref.read(shippingLineViewModelProvider.notifier);
+
+    await syncNotifier.syncAll();
+    await shippingLineRepo.reloadFromDatabase();
+    shippingLineVm.loadItems();
   }
 
   void _showAddDialog(BuildContext context) {

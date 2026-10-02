@@ -26,9 +26,13 @@ class TransportListScreen extends ConsumerStatefulWidget {
 
 class _TransportListScreenState extends ConsumerState<TransportListScreen> {
   Future<void> _onRefresh() async {
-    await ref.read(syncEngineProvider.notifier).syncAll();
-    await ref.read(transportRepositoryProvider).reloadFromDatabase();
-    ref.read(transportViewModelProvider.notifier).loadTransports();
+    final syncNotifier = ref.read(syncEngineProvider.notifier);
+    final transportRepo = ref.read(transportRepositoryProvider);
+    final transportVm = ref.read(transportViewModelProvider.notifier);
+
+    await syncNotifier.syncAll();
+    await transportRepo.reloadFromDatabase();
+    transportVm.loadTransports();
   }
 
   @override

@@ -59,15 +59,8 @@ class _AppShellState extends ConsumerState<AppShell> {
       final portCfsRepo = ref.read(portCfsRepositoryProvider);
       final transportRepo = ref.read(transportRepositoryProvider);
 
-      // Try pulling cloud data into local SQLite (doesn't fail local reload if cloud sync fails/offline)
-      try {
-        await syncEngine.startupSync();
-      } catch (e) {
-        debugPrint('Cloud startup sync skipped/failed: $e');
-      }
-      if (!mounted) return;
-
-      // Reload every repository's in-memory cache from the freshly updated SQLite
+      // 1. Immediately reload all repositories from local SQLite cache so the app
+      // opens and displays data instantly (0ms network delay).
       await vehicleRepo.reloadFromDatabase();
       if (!mounted) return;
       await driverRepo.reloadFromDatabase();
@@ -83,7 +76,7 @@ class _AppShellState extends ConsumerState<AppShell> {
       await transportRepo.reloadFromDatabase();
       if (!mounted) return;
 
-      // Notify every ViewModel so the UI rebuilds with fresh data
+      // Notify every ViewModel so the UI renders cached data immediately
       ref.read(vehicleViewModelProvider.notifier).loadVehicles();
       ref.read(driverViewModelProvider.notifier).loadDrivers();
       ref.read(partyViewModelProvider.notifier).loadParties();
@@ -91,6 +84,22 @@ class _AppShellState extends ConsumerState<AppShell> {
       ref.read(locationViewModelProvider.notifier).loadLocations();
       ref.read(portCfsViewModelProvider.notifier).loadItems();
       ref.read(transportViewModelProvider.notifier).loadTransports();
+
+      // 2. Perform cloud startup sync in the background with a timeout so slow
+      // connections or token refreshes never freeze or delay app startup.
+      try {
+        await syncEngine.startupSync().timeout(const Duration(seconds: 8));
+        if (mounted) {
+          await transportRepo.reloadFromDatabase();
+          await vehicleRepo.reloadFromDatabase();
+          await driverRepo.reloadFromDatabase();
+          ref.read(transportViewModelProvider.notifier).loadTransports();
+          ref.read(vehicleViewModelProvider.notifier).loadVehicles();
+          ref.read(driverViewModelProvider.notifier).loadDrivers();
+        }
+      } catch (e) {
+        debugPrint('Cloud startup sync skipped/failed: $e');
+      }
     } catch (_) {
       // Gracefully ignore if unmounted or cancelled during startup sync
     }
@@ -191,6 +200,30 @@ class _AppShellState extends ConsumerState<AppShell> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<SyncState>(syncEngineProvider, (previous, next) async {
+      if (previous?.isSyncing == true && !next.isSyncing) {
+        // Cloud sync completed: reload repositories from SQLite so all devices
+        // immediately reflect fresh vehicle, driver, and transport states.
+        try {
+          final vehicleRepo = ref.read(vehicleRepositoryProvider);
+          final driverRepo = ref.read(driverRepositoryProvider);
+          final transportRepo = ref.read(transportRepositoryProvider);
+          final vehicleVm = ref.read(vehicleViewModelProvider.notifier);
+          final driverVm = ref.read(driverViewModelProvider.notifier);
+          final transportVm = ref.read(transportViewModelProvider.notifier);
+
+          await vehicleRepo.reloadFromDatabase();
+          await driverRepo.reloadFromDatabase();
+          await transportRepo.reloadFromDatabase();
+          if (mounted) {
+            vehicleVm.loadVehicles();
+            driverVm.loadDrivers();
+            transportVm.loadTransports();
+          }
+        } catch (_) {}
+      }
+    });
+
     final isMobile = ResponsiveLayout.isMobile(context);
     final location = GoRouterState.of(context).uri.path;
     final syncState = ref.watch(syncEngineProvider);

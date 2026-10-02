@@ -24,9 +24,13 @@ class DriverListScreen extends ConsumerStatefulWidget {
 
 class _DriverListScreenState extends ConsumerState<DriverListScreen> {
   Future<void> _onRefresh() async {
-    await ref.read(syncEngineProvider.notifier).syncAll();
-    await ref.read(driverRepositoryProvider).reloadFromDatabase();
-    ref.read(driverViewModelProvider.notifier).loadDrivers();
+    final syncNotifier = ref.read(syncEngineProvider.notifier);
+    final driverRepo = ref.read(driverRepositoryProvider);
+    final driverVm = ref.read(driverViewModelProvider.notifier);
+
+    await syncNotifier.syncAll();
+    await driverRepo.reloadFromDatabase();
+    driverVm.loadDrivers();
   }
 
   void _showAddDialog(BuildContext context) {
@@ -145,8 +149,9 @@ class _DriverListScreenState extends ConsumerState<DriverListScreen> {
             style: ElevatedButton.styleFrom(backgroundColor: AppColors.red),
             onPressed: () async {
               Navigator.of(ctx).pop();
-              final success = await ref.read(driverViewModelProvider.notifier).deleteDriver(d.id);
-              if (!context.mounted) return;
+              final driverVm = ref.read(driverViewModelProvider.notifier);
+              final success = await driverVm.deleteDriver(d.id);
+              if (!mounted || !context.mounted) return;
               if (!success) {
                 final err = ref.read(driverViewModelProvider).errorMessage ?? 'Cannot delete driver';
                 ScaffoldMessenger.of(context).showSnackBar(
